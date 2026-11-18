@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historial de ventas · La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-izq">
+      <button class="btn-menu" type="button" id="btn-menu" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <a class="logo" href="ventas.html">
+        <span class="logo-icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><ellipse cx="12" cy="12" rx="5.2" ry="8.4" transform="rotate(35 12 12)" fill="#fff"/><path d="M8.6 6.6c3.4 2 .6 5.2 2.6 7 .8.8 1.8 1.2 3 1.4" transform="rotate(0 12 12)" fill="none" stroke="#4a2e27" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="logo-texto">La esquina del café</span>
+      </a>
+    </div>
+    <div class="topbar-der">
+      <span class="campana" title="Notificaciones" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></span>
+      <div class="fecha-hora">
+        <div id="top-fecha"></div>
+        <div id="top-hora"></div>
+      </div>
+      <button class="usuario-chip" type="button" id="usuario-chip" title="Cambiar sesión (temporal)">
+        <span class="avatar" id="top-avatar">··</span>
+        <span class="usuario-datos">
+          <strong id="top-nombre">Sin sesión</strong>
+          <small id="top-rol">Pulsa para iniciar</small>
+        </span>
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="Menú principal">
+      <div class="side-titulo">
+        <span class="side-icono"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 01-8 0"/></svg></span>
+        <div>
+          <strong>Ventas</strong>
+          <small>Administración</small>
+        </div>
+      </div>
+      <div class="side-seccion">Administración</div>
+      <nav>
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><span>Caja</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 4h6a4 4 0 014 4v12a3 3 0 00-3-3H2z"/><path d="M22 4h-6a4 4 0 00-4 4v12a3 3 0 013-3h7z"/></svg><span>Recepción</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span>Mermas</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></svg><span>Inventario</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span>Caducidades</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V3H6.5A2.5 2.5 0 004 5.5z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg><span>Catálogo</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><span>Productos</span></span>
+          
+        
+          
+            <a class="nav activo" href="ventas.html" aria-current="page"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 01-8 0"/></svg><span>Ventas</span></a>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/></svg><span>Reportes</span></span>
+          
+        
+          
+            <a class="nav" href="usuarios.html" ><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8"/></svg><span>Usuarios</span></a>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="19" rx="2"/><path d="M9 3h6v3H9zM9 12h6M9 16h6"/></svg><span>Bitácora</span></span>
+          
+        
+          
+            <span class="nav pendiente" title="Pendiente de desarrollar" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span>Respaldos</span></span>
+          
+        
+      </nav>
+      <div class="side-pie">
+        <div class="sucursal">
+          <span class="side-icono"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 9l1-5h16l1 5M3 9v11h18V9M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0M9 20v-6h6v6"/></svg></span>
+          <div><strong>Sucursal Centro</strong><small>Turno de mañana</small></div>
+          <span class="selector"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg></span>
+        </div>
+        <span class="nav pendiente" aria-disabled="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01"/></svg><span>Centro de ayuda</span></span>
+      </div>
+    </aside>
+    <div class="velo" id="velo" hidden></div>
+
+    <div class="contenido">
+      <main class="principal">
+        
+<h1>Historial de ventas</h1>
+<p class="subtitulo">Consulta cada transacción y da seguimiento a las ventas de tu cafetería.</p>
+
+<section class="resumen-card" aria-label="Resumen del periodo">
+  <div>
+    <small>Ventas netas</small>
+    <strong id="r-netas">—</strong>
+    <span id="r-rango">&nbsp;</span>
+  </div>
+  <div>
+    <small>Ventas completadas</small>
+    <strong id="r-completadas">—</strong>
+    <span id="r-ticket">&nbsp;</span>
+  </div>
+  <div>
+    <small>Ventas canceladas</small>
+    <strong id="r-canceladas">—</strong>
+    <span id="r-excluidas">&nbsp;</span>
+  </div>
+</section>
+
+<section class="panel" aria-label="Transacciones">
+  <form class="panel-filtros" id="filtros" autocomplete="off">
+    <div class="grupo">
+      <span class="etq">Fecha inicial</span>
+      <div class="campo-fecha">
+        <button type="button" aria-label="Fecha inicial"><span data-texto>—</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+        <input type="date" id="f-desde" tabindex="-1" aria-hidden="true">
+      </div>
+    </div>
+    <div class="grupo">
+      <span class="etq">Fecha final</span>
+      <div class="campo-fecha">
+        <button type="button" aria-label="Fecha final"><span data-texto>—</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+        <input type="date" id="f-hasta" tabindex="-1" aria-hidden="true">
+      </div>
+    </div>
+    <div class="grupo">
+      <label class="etq" for="f-estado">Estado</label>
+      <select id="f-estado">
+        <option value="">Todos los estados</option>
+        <option value="COMPLETADA">Completadas</option>
+        <option value="CANCELADA">Canceladas</option>
+      </select>
+    </div>
+    <button class="btn" type="submit"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M7 12h10M10 18h4"/></svg> Filtrar ventas</button>
+  </form>
+
+  <div class="panel-titulo">
+    <h2>Transacciones</h2>
+    <small id="t-conteo">Más recientes primero</small>
+  </div>
+
+  <div class="tabla-caja">
+    <table>
+      <thead>
+        <tr><th>Folio</th><th>Fecha</th><th>Total</th><th>Forma de pago</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="tabla-ventas">
+        <tr><td colspan="5" class="vacio">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel-pie">
+    <span id="pag-info">&nbsp;</span>
+    <nav class="paginacion" id="paginacion" aria-label="Paginación"></nav>
+  </div>
+</section>
+
+<dialog id="modal-venta" class="modal ancho">
+  <h2 id="v-titulo">Ticket</h2>
+  <div class="ticket-meta" id="v-meta"></div>
+  <div class="tabla-caja">
+    <table>
+      <thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Subtotal</th></tr></thead>
+      <tbody id="v-lineas"></tbody>
+    </table>
+  </div>
+  <div class="totales" id="v-totales"></div>
+  <p class="nota-pendiente" id="v-nota" hidden>
+    La cancelación y devolución (regreso de stock a los lotes) se activará al integrar M1 de Francisco.
+  </p>
+  <div class="modal-pie">
+    <button class="btn btn-peligro" type="button" id="v-cancelar" disabled
+            title="Pendiente de integrar M1">Cancelar / devolver venta</button>
+    <button class="btn btn-claro" type="button" id="v-cerrar">Cerrar</button>
+  </div>
+</dialog>
+
+      </main>
+      <footer class="pie">
+        <span>grano. / Administración de cafetería</span>
+        <span>Sucursal Centro · Importes en MXN</span>
+      </footer>
+    </div>
+  </div>
+
+  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
+
+  <!-- TEMPORAL: sustituir por la pantalla de login del equipo cuando exista -->
+  <dialog id="dlg-token" class="modal">
+    <form method="dialog" id="form-token">
+      <h2>Iniciar sesión (temporal)</h2>
+      <p class="ayuda">Pega el token de administrador. Lo obtienes con
+        <code>python -m app.dev_token</code>.</p>
+      <textarea id="txt-token" rows="4" required spellcheck="false"></textarea>
+      <div class="modal-pie">
+        <button class="btn btn-claro" type="button" id="btn-token-cancelar">Cancelar</button>
+        <button class="btn" type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="js/api.js"></script>
+  
+<script src="js/ventas.js"></script>
+
+</body>
+</html>
