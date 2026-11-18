@@ -1,91 +1,96 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Historial de Ventas - La Esquina del Café</title>
-    <link rel="stylesheet" href="css/estilos.css">
-    <style>
-        /* Paleta de colores estilo cafetería */
-        :root {
-            --cafe-oscuro: #3E2723;
-            --cafe-medio: #6D4C41;
-            --crema-fondo: #FAF6F0;
-            --beige-tarjeta: #EFE6DD;
-            --verde-exito: #2E7D32;
-            --rojo-cancelado: #C62828;
-        }
-
-        body {
-            background-color: var(--crema-fondo);
-            color: var(--cafe-oscuro);
-            font-family: 'Segoe UI', sans-serif;
-        }
-
-        .contenedor-historial {
-            background: #FFFFFF;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 10px rgba(62, 39, 35, 0.08);
-        }
-
-        .tabla-ventas {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        .tabla-ventas th {
-            background-color: var(--cafe-oscuro);
-            color: #FFFFFF;
-            padding: 12px;
-            text-align: left;
-        }
-
-        .tabla-ventas td {
-            padding: 12px;
-            border-bottom: 1px solid var(--beige-tarjeta);
-        }
-
-        .tabla-ventas tr:hover {
-            background-color: var(--crema-fondo);
-        }
-
-        .badge-completada {
-            background-color: #E8F5E9;
-            color: var(--verde-exito);
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 0.85em;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historial de ventas | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .filtros-ventas { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+    .filtros-ventas .campo { margin-bottom: 0; min-width: 180px; }
+    .tabla-ventas td.num { text-align: right; }
+    .tabla-ventas .acciones { display: flex; gap: 8px; }
+    .tabla-ventas .btn { padding: 6px 12px; font-size: 0.82rem; }
+    .fila-cancelada td { color: var(--texto-suave); }
+    .fila-cancelada td.total { text-decoration: line-through; }
+    .vacio { text-align: center; color: var(--texto-suave); padding: 24px; }
+    .detalle-lista { margin: 8px 0 14px 18px; }
+  </style>
 </head>
 <body>
-    <!-- Aquí va tu menú lateral cargado por menu.js -->
-    <div id="sidebar-container"></div>
 
-    <main class="contenido-principal">
-        <div class="contenedor-historial">
-            <h2>Historial de Ventas</h2>
-            <table class="tabla-ventas">
-                <thead>
-                    <tr>
-                        <th>Folio</th>
-                        <th>Fecha y Hora</th>
-                        <th>Productos</th>
-                        <th>Método de Pago</th>
-                        <th>Total</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody id="tabla-ventas-body">
-                    <!-- Se llena dinámicamente desde Python -->
-                </tbody>
-            </table>
+  <header class="topbar" id="topbar"></header>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Historial de ventas</h1>
+        <p class="subtitulo">Consulta de ventas por día. El Administrador puede cancelar una venta y el inventario se restituye automáticamente.</p>
+
+        <div class="alerta-error" id="error-ventas" style="display:none;"></div>
+
+        <div class="card filtros-ventas">
+          <div class="campo">
+            <label for="filtro-fecha">Fecha</label>
+            <input type="date" id="filtro-fecha">
+          </div>
+          <button type="button" class="btn btn-secundario" id="btn-hoy">Hoy</button>
+          <button type="button" class="btn btn-secundario" id="btn-todas">Últimas 100</button>
         </div>
-    </main>
 
-    <script src="js/menu.js"></script>
-    <script src="js/historial_ventas.js"></script>
+        <div class="card">
+          <table class="tabla-ventas">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Fecha y hora</th>
+                <th>Productos</th>
+                <th>Forma de pago</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-ventas-body">
+              <tr><td colspan="7" class="vacio">Cargando ventas…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: detalle de la venta (RF 3: precio cobrado e insumos descontados) -->
+  <div class="modal-fondo" id="modal-detalle-venta" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="detalle-titulo">
+    <div class="modal" style="max-width: 520px;">
+      <h2 id="detalle-titulo">Venta</h2>
+      <div id="detalle-cuerpo"></div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-primario" onclick="cerrarModal('modal-detalle-venta')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: elegir motivo de cancelación (RF 9, RF 18 sin texto libre) -->
+  <div class="modal-fondo" id="modal-cancelar-venta" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="cancelar-titulo">
+    <div class="modal" style="max-width: 460px;">
+      <h2 id="cancelar-titulo">Cancelar venta</h2>
+      <p id="cancelar-resumen"></p>
+      <div class="campo">
+        <label for="motivo-cancelacion">Motivo</label>
+        <select id="motivo-cancelacion"></select>
+      </div>
+      <div class="alerta-error" id="error-cancelacion" style="display:none;"></div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" onclick="cerrarModal('modal-cancelar-venta')">Regresar</button>
+        <button type="button" class="btn btn-peligro" id="btn-continuar-cancelacion">Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/historial_ventas.js"></script>
 </body>
 </html>
