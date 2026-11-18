@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel principal | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    /* Ajustes específicos del Panel Principal basados en el boceto de Figma */
+    .panel-encabezado {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .panel-encabezado h1 {
+      margin-bottom: 0.25rem;
+    }
+    .panel-encabezado .subtitulo {
+      margin-bottom: 0;
+    }
+    .panel-acciones-top {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .banner-peps {
+      background-color: #f6efe6;
+      border: 1px solid #eadfce;
+      border-radius: 10px;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: #3d2c22;
+    }
+    .banner-pildoras {
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    .pildora-estado {
+      background: #ffffff;
+      border: 1px solid #eadfce;
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .pildora-rojo { color: #b91c1c; }
+    .pildora-amarillo { color: #b45309; }
+    .punto {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .punto-rojo { background-color: #dc2626; }
+    .punto-amarillo { background-color: #d97706; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .kpi-titulo {
+      font-size: 0.9rem;
+      color: #6b5e55;
+      margin: 0;
+    }
+    .kpi-valor {
+      font-size: 1.85rem;
+      font-weight: 700;
+      color: #2c1e16;
+      margin: 0.15rem 0;
+    }
+    .kpi-pie {
+      font-size: 0.82rem;
+      color: #7c6f66;
+      margin: 0;
+    }
+    .kpi-tag {
+      display: inline-block;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+    .kpi-tag-rojo {
+      background-color: #fee2e2;
+      color: #b91c1c;
+    }
+    .kpi-tag-amarillo {
+      background-color: #fef3c7;
+      color: #b45309;
+    }
+
+    .tabla-card-header {
+      margin-bottom: 1rem;
+    }
+    .tabla-card-header h2 {
+      font-size: 1.15rem;
+      margin: 0 0 0.2rem 0;
+    }
+    .tabla-card-header p {
+      font-size: 0.88rem;
+      color: #6b5e55;
+      margin: 0;
+    }
+    .texto-tenue { color: #7c6f66; }
+    .texto-rojo { color: #b91c1c; font-weight: 500; }
+    .texto-amarillo { color: #b45309; font-weight: 500; }
+    .texto-neutro { color: #6b5e55; }
+    .tabla-footer {
+      margin-top: 0.85rem;
+      font-size: 0.85rem;
+      color: #7c6f66;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Barra superior: la dibuja js/menu.js. NO TOCAR -->
+  <header class="topbar" id="topbar"></header>
+
+  <div class="app">
+
+    <!-- Menú lateral: lo dibuja js/menu.js según el rol. NO TOCAR -->
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <!-- Área de trabajo -->
+    <main class="contenido">
+      <section class="pantalla">
+
+        <!-- Encabezado con botones de acción rápida -->
+        <div class="panel-encabezado">
+          <div>
+            <h1>Panel principal</h1>
+            <p class="subtitulo">Resumen operativo de ventas, inventario PEPS y alertas del turno</p>
+          </div>
+          <div class="panel-acciones-top">
+            <button type="button" class="btn btn-secundario" onclick="window.location.href='recepcion.html'">+ Recepción de lote</button>
+            <button type="button" class="btn btn-primario" onclick="window.location.href='caja.html'">+ Nueva venta en caja</button>
+          </div>
+        </div>
+
+        <!-- Franja de estado operativo PEPS -->
+        <div class="banner-peps">
+          <span>Estado operativo del turno · <strong id="estado-peps">Regla PEPS activa</strong></span>
+          <div class="banner-pildoras">
+            <span class="pildora-estado pildora-rojo">
+              <span class="punto punto-rojo"></span>
+              <span id="banner-bajo-minimo">0 insumos bajo mínimo</span>
+            </span>
+            <span class="pildora-estado pildora-amarillo">
+              <span class="punto punto-amarillo"></span>
+              <span id="banner-por-vencer">0 lotes próximos a vencer</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 4 Tarjetas KPI -->
+        <div class="kpi-grid">
+          <article class="card kpi-card">
+            <p class="kpi-titulo">Ventas del día</p>
+            <p class="kpi-valor" id="kpi-ventas">$0.00</p>
+            <p class="kpi-pie" id="kpi-tickets">0 tickets</p>
+          </article>
+
+          <article class="card kpi-card">
+            <p class="kpi-titulo">Insumos bajo mínimo</p>
+            <p class="kpi-valor" id="kpi-minimo">0 insumos</p>
+            <span class="kpi-tag kpi-tag-rojo">Requieren reabastecimiento</span>
+          </article>
+
+          <article class="card kpi-card">
+            <p class="kpi-titulo">Próximos a caducar</p>
+            <p class="kpi-valor" id="kpi-caducar">0 lotes</p>
+            <span class="kpi-tag kpi-tag-amarillo">Vencimiento cercano</span>
+          </article>
+
+          <article class="card kpi-card">
+            <p class="kpi-titulo">Mermas del mes</p>
+            <p class="kpi-valor" id="kpi-mermas">$0.00</p>
+            <p class="kpi-pie" id="kpi-registros-mermas">0 registros</p>
+          </article>
+        </div>
+
+        <!-- Tabla de alertas de inventario y caducidad -->
+        <div class="card">
+          <div class="tabla-card-header">
+            <h2>Alertas de inventario y caducidad</h2>
+            <p>Seguimiento de insumos y lotes del turno</p>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Insumo</th>
+                <th>Lote</th>
+                <th>Vencimiento</th>
+                <th>Cantidad restante</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-alertas-body"></tbody>
+          </table>
+
+          <p class="tabla-footer" id="contador-alertas">0 alertas mostradas</p>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- Obligatorio y siempre PRIMERO -->
+  <script src="js/menu.js"></script>
+  <script src="js/inicio.js"></script>
+</body>
+</html>
