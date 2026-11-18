@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- ① CAMBIA el título de la pestaña del navegador -->
+  <title>Título de la pantalla | La Esquina del Café</title>
+
+  <!-- Rutas obligatorias (este archivo debe estar en frontend/, junto a las carpetas css/ y js/) -->
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+
+  <!-- Barra superior: la dibuja js/menu.js. NO TOCAR -->
+  <header class="topbar" id="topbar"></header>
+
+  <div class="app">
+
+    <!-- Menú lateral: lo dibuja js/menu.js según el rol. NO TOCAR -->
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <!-- Área de trabajo -->
+    <main class="contenido">
+      <section class="pantalla">
+
+        <!-- ② CAMBIA el título y el subtítulo de TU ventana -->
+        <h1>Título de la pantalla</h1>
+        <p class="subtitulo">Descripción corta de la pantalla.</p>
+
+        <!-- ③ PEGA AQUÍ EL CONTENIDO DE TU VENTANA -->
+        <!-- Clases listas: .card  .btn .btn-primario .btn-secundario .btn-peligro
+             .campo  table  .badge-verde .badge-amarillo .badge-rojo  .alerta-error -->
+
+      </section>
+    </main>
+  </div>
+
+  <!-- ④ MODALES DE TU PANTALLA (opcional). Copia y renombra el id:
+  <div class="modal-fondo" id="mi-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <h2>Título del modal</h2>
+      <p>Contenido</p>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" onclick="cerrarModal('mi-modal')">Cancelar</button>
+        <button type="button" class="btn btn-primario">Aceptar</button>
+      </div>
+    </div>
+  </div>
+  Abrir: abrirModal("mi-modal")      Cerrar: cerrarModal("mi-modal")
+
+  Confirmación M1 (ya existe, NO la copies):
+  mostrarConfirmacion({ titulo: "Eliminar", mensaje: "¿Desea eliminarlo?", onConfirmar: () => { ... } });
+  -->
+
+  <!-- Obligatorio y siempre PRIMERO -->
+  <script src="js/menu.js"></script>
+
+  <!-- ⑤ ENLAZA AQUÍ EL .js DE TU PANTALLA (descomenta y cambia el nombre) -->
+  <!-- <script src="js/tu_pantalla.js"></script> -->
+</body>
+</html>
