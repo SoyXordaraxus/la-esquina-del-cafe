@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from database import get_db
+from backend.database.database import get_db
 from services.venta_service import (
     MENSAJE_STOCK,
     DatosInvalidos,
