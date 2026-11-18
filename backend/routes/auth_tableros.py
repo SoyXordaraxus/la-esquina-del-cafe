@@ -1,69 +1,130 @@
-from fastapi import APIRouter
+from datetime import date, timedelta
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+from backend.database import get_db
+from backend.models import Insumo, LoteInsumo, Venta, Merma
 
 router = APIRouter(prefix="/api", tags=["Tableros"])
 
+
 # ==========================================
-# 1. RUTA DEL PANEL PRINCIPAL (02_Panel)
+# 1. PANEL PRINCIPAL (02_Panel) - DESDE MYSQL
 # ==========================================
 @router.get("/dashboard/resumen")
-def obtener_resumen_dia():
-    return {
-        "estado_turno": "Regla PEPS activa",
-        "metricas": {
-            "ventas_dia": 4850.00,
-            "tickets_dia": 28,
-            "insumos_bajo_minimo": 3,
-            "lotes_proximos_caducar": 4,
-            "mermas_mes": 320.00,
-            "registros_mermas": 2
-        },
-        "alertas": [
-            {
-                "insumo": "Leche entera 1 L",
-                "lote": "LA-041126",
-                "vencimiento": "Venció hace 2 días",
-                "vencimiento_tipo": "rojo",
-                "cantidad_restante": "12 L",
-                "estado": "Caducado",
-                "estado_tipo": "rojo",
-                "accion": "Registrar merma"
-            },
-            {
-                "insumo": "Yogur natural 150 g",
-                "lote": "YO-051126",
-                "vencimiento": "Venció ayer",
-                "vencimiento_tipo": "rojo",
-                "cantidad_restante": "18 piezas",
-                "estado": "Caducado",
-                "estado_tipo": "rojo",
-                "accion": "Registrar merma"
-            },
-            {
-                "insumo": "Café en grano 1 kg",
-                "lote": "CA-281026",
-                "vencimiento": "Mínimo: 3 kg",
+def obtener_resumen_dia(db: Session = Depends(get_db)):
+    hoy = date.today()
+    limite_caducidad = hoy + timedelta(days=7)
+
+    # Ventas del día (o acumuladas si aún no hay ventas con fecha de hoy)
+    ventas_hoy = db.query(Venta).filter(func.date(Venta.fecha_emision_ticket) == hoy).all()
+    if not ventas_hoy:
+        ventas_hoy = db.query(Venta).all()
+
+    ventas_dia = sum(float(v.total) for v in ventas_hoy)
+    tickets_dia = len(ventas_hoy)
+
+    # Mermas registradas
+    mermas = db.query(Merma).all()
+    registros_mermas = len(mermas)
+    mermas_mes = 0.0
+    for m in mermas:
+        lote = db.query(LoteInsumo).filter(LoteInsumo.id_lote == m.id_lote).first()
+        costo = float(lote.costo_unitario) if lote else 25.0
+        mermas_mes += float(m.cantidad) * costo
+
+    # Insumos y lotes activos
+    insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
+    insumos_bajo_minimo = 0
+    alertas = []
+
+    for ins in insumos:
+        lotes_insumo = (
+            db.query(LoteInsumo)
+            .filter(LoteInsumo.id_insumo == ins.id_insumo, LoteInsumo.cantidad_disponible > 0)
+            .order_by(LoteInsumo.caducidad.asc())
+            .all()
+        )
+        stock_total = sum(float(l.cantidad_disponible) for l in lotes_insumo)
+        minimo = float(ins.minimo_reposicion)
+
+        if stock_total <= minimo:
+            insumos_bajo_minimo += 1
+            lote_ref = lotes_insumo[0].numero_factura if lotes_insumo and lotes_insumo[0].numero_factura else f"INS-{ins.id_insumo:03d}"
+            alertas.append({
+                "insumo": ins.nombre,
+                "lote": lote_ref,
+                "vencimiento": f"Mínimo: {minimo:g} {ins.unidad_medida}",
                 "vencimiento_tipo": "neutro",
-                "cantidad_restante": "1.5 kg",
+                "cantidad_restante": f"{stock_total:g} {ins.unidad_medida}",
                 "estado": "Stock bajo",
                 "estado_tipo": "rojo",
                 "accion": "Reabastecer"
-            },
-            {
-                "insumo": "Queso crema",
-                "lote": "QC-101126",
-                "vencimiento": "Vence en 4 días",
+            })
+
+    # Lotes caducados o próximos a caducar (<= 7 días)
+    lotes_proximos = (
+        db.query(LoteInsumo)
+        .filter(
+            LoteInsumo.cantidad_disponible > 0,
+            LoteInsumo.caducidad != None,
+            LoteInsumo.caducidad <= limite_caducidad
+        )
+        .order_by(LoteInsumo.caducidad.asc())
+        .all()
+    )
+
+    lotes_proximos_caducar = len(lotes_proximos)
+
+    for lote in lotes_proximos:
+        ins = db.query(Insumo).filter(Insumo.id_insumo == lote.id_insumo).first()
+        if not ins:
+            continue
+        dias = (lote.caducidad - hoy).days
+        codigo_lote = lote.numero_factura or f"LOTE-{lote.id_lote:03d}"
+
+        if dias < 0:
+            texto_venc = "Venció ayer" if dias == -1 else f"Venció hace {abs(dias)} días"
+            alertas.insert(0, {
+                "insumo": ins.nombre,
+                "lote": codigo_lote,
+                "vencimiento": texto_venc,
+                "vencimiento_tipo": "rojo",
+                "cantidad_restante": f"{float(lote.cantidad_disponible):g} {ins.unidad_medida}",
+                "estado": "Caducado",
+                "estado_tipo": "rojo",
+                "accion": "Registrar merma"
+            })
+        else:
+            texto_venc = "Vence hoy" if dias == 0 else f"Vence en {dias} días"
+            alertas.append({
+                "insumo": ins.nombre,
+                "lote": codigo_lote,
+                "vencimiento": texto_venc,
                 "vencimiento_tipo": "amarillo",
-                "cantidad_restante": "2.5 kg",
+                "cantidad_restante": f"{float(lote.cantidad_disponible):g} {ins.unidad_medida}",
                 "estado": "Por vencer",
                 "estado_tipo": "amarillo",
                 "accion": "Ver lote"
-            }
-        ]
+            })
+
+    return {
+        "estado_turno": "Regla PEPS activa",
+        "metricas": {
+            "ventas_dia": round(ventas_dia, 2),
+            "tickets_dia": tickets_dia,
+            "insumos_bajo_minimo": insumos_bajo_minimo,
+            "lotes_proximos_caducar": lotes_proximos_caducar,
+            "mermas_mes": round(mermas_mes, 2),
+            "registros_mermas": registros_mermas
+        },
+        "alertas": alertas
     }
 
 
 # ==========================================
-# 2. LÓGICA Y RUTA DEL SEMÁFORO (06_Inventario)
+# 2. SEMÁFORO (06_Inventario) - DESDE MYSQL
 # ==========================================
 def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float) -> dict:
     porcentaje = round((existencia_actual / existencia_minima) * 100) if existencia_minima > 0 else 100
@@ -89,25 +150,35 @@ def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float)
 
 
 @router.get("/inventario/semaforo")
-def obtener_inventario_semaforo():
-    # Productos mock idénticos al boceto de Figma (listos para conectar a MySQL)
-    productos_mock = [
-        {"id": 1, "codigo": "AB-001", "nombre": "Arroz a granel", "categoria": "Abarrotes", "subcategoria": "Granos", "unidad": "kg", "existencia_actual": 180, "existencia_minima": 100},
-        {"id": 2, "codigo": "AB-002", "nombre": "Frijol negro a granel", "categoria": "Abarrotes", "subcategoria": "Granos", "unidad": "kg", "existencia_actual": 110, "existencia_minima": 100},
-        {"id": 3, "codigo": "LA-001", "nombre": "Leche entera 1 L", "categoria": "Lácteos", "subcategoria": "Leches", "unidad": "unidades", "existencia_actual": 100, "existencia_minima": 100},
-        {"id": 4, "codigo": "AB-003", "nombre": "Aceite vegetal 1 L", "categoria": "Abarrotes", "subcategoria": "Aceites", "unidad": "unidades", "existencia_actual": 150, "existencia_minima": 100},
-        {"id": 5, "codigo": "AB-004", "nombre": "Azúcar a granel", "categoria": "Abarrotes", "subcategoria": "Endulzantes", "unidad": "kg", "existencia_actual": 60, "existencia_minima": 50},
-        {"id": 6, "codigo": "LA-002", "nombre": "Yogur natural 150 g", "categoria": "Lácteos", "subcategoria": "Derivados", "unidad": "unidades", "existencia_actual": 24, "existencia_minima": 40},
-    ]
+def obtener_inventario_semaforo(db: Session = Depends(get_db)):
+    insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
 
     resultado = []
     resumen = {"verde": 0, "amarillo": 0, "rojo": 0}
 
-    for prod in productos_mock:
-        estado = calcular_estado_semaforo(prod["existencia_actual"], prod["existencia_minima"])
+    for ins in insumos:
+        lotes = (
+            db.query(LoteInsumo)
+            .filter(LoteInsumo.id_insumo == ins.id_insumo, LoteInsumo.cantidad_disponible > 0)
+            .order_by(LoteInsumo.caducidad.asc())
+            .all()
+        )
+        existencia_actual = sum(float(l.cantidad_disponible) for l in lotes)
+        existencia_minima = float(ins.minimo_reposicion)
+        codigo = lotes[0].numero_factura if lotes and lotes[0].numero_factura else f"INS-{ins.id_insumo:03d}"
+
+        estado = calcular_estado_semaforo(existencia_actual, existencia_minima)
         resumen[estado["color"]] += 1
+
         resultado.append({
-            **prod,
+            "id": ins.id_insumo,
+            "codigo": codigo,
+            "nombre": ins.nombre,
+            "categoria": ins.categoria,
+            "subcategoria": "Perecederos" if ins.es_perecedero else "No perecederos",
+            "unidad": ins.unidad_medida,
+            "existencia_actual": round(existencia_actual, 2),
+            "existencia_minima": round(existencia_minima, 2),
             "semaforo": estado
         })
 
