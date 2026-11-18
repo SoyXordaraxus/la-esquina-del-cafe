@@ -239,7 +239,11 @@ function configurarEventos() {
 }
 
 // 6. Enviar venta al servidor FastAPI
+let cobroEnCurso = false;   // evita cobrar dos veces si se hace doble clic en "Confirmar pago"
+
 async function procesarVenta() {
+  if (cobroEnCurso) return;
+
   const total = calcularTotal();
   const formaPago = document.querySelector('input[name="forma_pago"]:checked').value;
   const errorEl = document.getElementById("error-cobro");
@@ -265,38 +269,58 @@ async function procesarVenta() {
     }))
   };
 
+  const btnConfirmar = document.getElementById("btn-confirmar-pago");
+  cobroEnCurso = true;
+  btnConfirmar.disabled = true;
+
+  // --- Paso 1: llamar al servidor. Solo si NO hay conexión se simula la venta ---
+  let resp;
   try {
-    const resp = await fetch(`${API_URL}/cobrar`, {
+    resp = await fetch(`${API_URL}/cobrar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      // Si el servidor detecta falta de insumos en la receta (RF 7)
-      cerrarModal("modal-cobro");
-      const alertaStock = document.getElementById("alerta-stock");
-      alertaStock.textContent = data.detail || "Inventario insuficiente. No se realizó el cobro.";
-      alertaStock.style.display = "block";
-      return;
-    }
-
-    // Venta exitosa
-    cerrarModal("modal-cobro");
-    const cambio = formaPago === "Efectivo" ? (montoRecibido - total) : 0;
-    alert(`Venta #${data.id_venta || "OK"} registrada correctamente.\nCambio: $${cambio.toFixed(2)}`);
-    comanda = [];
-    renderizarComanda();
-    cargarProductos();
-
   } catch (err) {
+    cobroEnCurso = false;
+    btnConfirmar.disabled = false;
     // Modo prueba sin backend encendido
     cerrarModal("modal-cobro");
-    const cambio = formaPago === "Efectivo" ? (montoRecibido - total) : 0;
-    alert(`[MODO LOCAL SIN BACKEND]\nVenta simulada por $${total.toFixed(2)}\nCambio: $${cambio.toFixed(2)}`);
+    const cambioLocal = formaPago === "Efectivo" ? (montoRecibido - total) : 0;
+    alert(`[MODO LOCAL SIN BACKEND]\nVenta simulada por $${total.toFixed(2)}\nCambio: $${cambioLocal.toFixed(2)}`);
     comanda = [];
     renderizarComanda();
+    return;
   }
+
+  // --- Paso 2: leer la respuesta (puede venir sin JSON si el servidor falló) ---
+  let data = {};
+  try {
+    data = await resp.json();
+  } catch (e) {
+    data = {};
+  }
+  cobroEnCurso = false;
+  btnConfirmar.disabled = false;
+
+  // --- Paso 3: el servidor rechazó la venta (falta de insumos, datos inválidos, error) ---
+  if (!resp.ok) {
+    cerrarModal("modal-cobro");
+    const alertaStock = document.getElementById("alerta-stock");
+    // "detail" es texto en 400/409; en otros errores puede ser una lista u omitirse
+    alertaStock.textContent = (typeof data.detail === "string" && data.detail)
+      ? data.detail
+      : "No se realizó el cobro. Revise la comanda e intente de nuevo.";
+    alertaStock.style.display = "block";
+    cargarProductos();   // vuelve a pedir el catálogo: los productos sin stock se ponen en gris
+    return;
+  }
+
+  // --- Paso 4: venta exitosa ---
+  cerrarModal("modal-cobro");
+  const cambio = formaPago === "Efectivo" ? (montoRecibido - total) : 0;
+  alert(`Venta #${data.id_venta || "OK"} registrada correctamente.\nCambio: $${cambio.toFixed(2)}`);
+  comanda = [];
+  renderizarComanda();
+  cargarProductos();
 }
