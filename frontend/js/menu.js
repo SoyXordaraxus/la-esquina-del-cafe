@@ -5,11 +5,11 @@
    menú cambia, se corrige aquí una sola vez para las 14 pantallas.
 
    SESIÓN (modo desarrollo, SIN login.html)
-   - Si no hay sesión en localStorage, se crea un usuario de prueba:
+- Si no hay sesión en localStorage, se crea un usuario de prueba:
        { nombre: "Andres Mosso", rol: "Administrador" }
-   - En la barra superior hay un selector "DEV · Rol" para alternar
+- En la barra superior hay un selector "DEV · Rol" para alternar
      entre Administrador y Cajero sin necesitar login.
-   - NUNCA se redirige a login.html.
+- NUNCA se redirige a login.html.
 
    CONTRATO CON EL LOGIN (Osvaldo), cuando exista:
      localStorage.setItem("usuario", JSON.stringify({
@@ -235,10 +235,11 @@ function construirLayout() {
 
   // ---- Menú lateral ----
   const seccion = usuario.rol === "Administrador" ? "Administración" : "Operación";
+  const itemActual = MENU_ITEMS.find(i => i.archivo === paginaActual) || MENU_ITEMS[0];
   document.getElementById("sidebar").innerHTML = `
     <div class="sidebar-titulo">
-      ${svg("inventario", 22)}
-      <div class="sb-txt"><strong>Inventario</strong><small>${seccion}</small></div>
+      ${svg(itemActual.icono, 22)}
+      <div class="sb-txt"><strong>${itemActual.texto}</strong><small>${seccion}</small></div>
     </div>
     <div class="sidebar-seccion">${seccion}</div>
     <nav aria-label="Menú principal">
