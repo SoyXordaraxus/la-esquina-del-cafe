@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .inv-filtros {
+      display: grid;
+      grid-template-columns: 1fr 1fr 2fr;
+      gap: 1rem;
+      margin: 1.25rem 0 1.5rem 0;
+    }
+    @media (max-width: 900px) {
+      .inv-filtros { grid-template-columns: 1fr; }
+    }
+    .filtro-grupo label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #3d2c22;
+      margin-bottom: 0.35rem;
+    }
+    .filtro-grupo select,
+    .filtro-grupo input {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      border: 1px solid #dfd3c3;
+      border-radius: 8px;
+      background-color: #ffffff;
+      font-size: 0.92rem;
+      color: #2c1e16;
+    }
+
+    /* Leyenda de contadores */
+    .leyenda-semaforo {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .leyenda-item {
+      cursor: pointer;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      transition: background 0.15s ease;
+    }
+    .leyenda-item:hover,
+    .leyenda-item.activo {
+      background-color: #f6efe6;
+    }
+    .leyenda-titulo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #2c1e16;
+    }
+    .leyenda-sub {
+      font-size: 0.8rem;
+      color: #7c6f66;
+      margin-left: 1.1rem;
+    }
+    .punto-lg {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .punto-verde { background-color: #16a34a; }
+    .punto-amarillo { background-color: #f59e0b; }
+    .punto-rojo { background-color: #dc2626; }
+
+    /* Barra meta */
+    .inv-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .inv-meta strong { color: #2c1e16; }
+    .inv-meta span { color: #7c6f66; font-size: 0.82rem; }
+
+    /* Cuadrícula 3 columnas de tarjetas */
+    .productos-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.15rem;
+    }
+    @media (max-width: 1050px) {
+      .productos-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 680px) {
+      .productos-grid { grid-template-columns: 1fr; }
+    }
+
+    .prod-card {
+      border-radius: 12px;
+      padding: 1.15rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 0.9rem;
+      border: 1.5px solid transparent;
+    }
+    .prod-card.verde {
+      background-color: #f6fbf7;
+      border-color: #86c997;
+    }
+    .prod-card.amarillo {
+      background-color: #fefbf3;
+      border-color: #f3c86b;
+    }
+    .prod-card.rojo {
+      background-color: #fdf6f6;
+      border-color: #e69292;
+    }
+
+    .prod-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+    }
+    .prod-estado {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 600;
+    }
+    .prod-card.verde .prod-estado,
+    .prod-card.verde .prod-pct { color: #15803d; }
+    .prod-card.amarillo .prod-estado,
+    .prod-card.amarillo .prod-pct { color: #b45309; }
+    .prod-card.rojo .prod-estado,
+    .prod-card.rojo .prod-pct { color: #b91c1c; }
+
+    .prod-codigo {
+      color: #8c7f75;
+      font-weight: 500;
+    }
+    .prod-nombre {
+      font-size: 1.08rem;
+      font-weight: 700;
+      color: #2c1e16;
+      margin: 0.25rem 0 0 0;
+    }
+
+    .prod-metricas {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      align-items: end;
+    }
+    .metrica-label {
+      display: block;
+      font-size: 0.78rem;
+      color: #7c6f66;
+      margin-bottom: 0.15rem;
+    }
+    .metrica-actual {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #2c1e16;
+      line-height: 1;
+    }
+    .metrica-minima {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #2c1e16;
+    }
+    .metrica-unidad {
+      font-size: 0.82rem;
+      color: #6b5e55;
+      margin-left: 0.2rem;
+    }
+
+    .prod-footer {
+      border-top: 1px solid rgba(0, 0, 0, 0.07);
+      padding-top: 0.65rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.83rem;
+    }
+    .prod-pct { font-weight: 700; }
+    .prod-link {
+      background: none;
+      border: none;
+      color: #3d2c22;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      font-size: 0.83rem;
+    }
+    .prod-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <header class="topbar" id="topbar"></header>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="contenido">
+      <section class="pantalla">
+
+        <h1>Inventario</h1>
+        <p class="subtitulo">Consulta de existencias y niveles mínimos por producto.</p>
+
+        <!-- Filtros superiores -->
+        <div class="inv-filtros">
+          <div class="filtro-grupo">
+            <label for="filtro-categoria">Categoría</label>
+            <select id="filtro-categoria" onchange="actualizarSubcategorias()">
+              <option value="todas">Todas las categorías</option>
+            </select>
+          </div>
+
+          <div class="filtro-grupo">
+            <label for="filtro-subcategoria">Subcategoría</label>
+            <select id="filtro-subcategoria" onchange="aplicarFiltros()">
+              <option value="todas">Todas las subcategorías</option>
+            </select>
+          </div>
+
+          <div class="filtro-grupo">
+            <label for="buscador-producto">Buscar producto</label>
+            <input type="text" id="buscador-producto" placeholder="Nombre del producto o código de producto" oninput="aplicarFiltros()">
+          </div>
+        </div>
+
+        <!-- Resumen de semáforo (clickeable para filtrar por color) -->
+        <div class="leyenda-semaforo">
+          <div class="leyenda-item" data-color="verde" onclick="alternarFiltroColor('verde', this)">
+            <div class="leyenda-titulo">
+              <span class="punto-lg punto-verde"></span>
+              <span id="txt-suficientes">0 suficientes</span>
+            </div>
+            <div class="leyenda-sub">&gt;120% del mínimo</div>
+          </div>
+
+          <div class="leyenda-item" data-color="amarillo" onclick="alternarFiltroColor('amarillo', this)">
+            <div class="leyenda-titulo">
+              <span class="punto-lg punto-amarillo"></span>
+              <span id="txt-bajas">0 con existencias bajas</span>
+            </div>
+            <div class="leyenda-sub">&gt;100% y ≤120% del mínimo</div>
+          </div>
+
+          <div class="leyenda-item" data-color="rojo" onclick="alternarFiltroColor('rojo', this)">
+            <div class="leyenda-titulo">
+              <span class="punto-lg punto-rojo"></span>
+              <span id="txt-criticas">0 con existencias críticas</span>
+            </div>
+            <div class="leyenda-sub">≤100% del mínimo</div>
+          </div>
+        </div>
+
+        <!-- Contador y nota -->
+        <div class="inv-meta">
+          <strong id="contador-productos">0 productos</strong>
+          <span>Cantidades expresadas en unidades base</span>
+        </div>
+
+        <!-- Cuadrícula de tarjetas -->
+        <div class="productos-grid" id="grid-productos"></div>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal de detalle rápido -->
+  <div class="modal-fondo" id="modal-detalle-producto" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <h2 id="modal-prod-titulo">Detalle del producto</h2>
+      <div id="modal-prod-contenido" style="margin: 1rem 0; line-height: 1.6;"></div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-primario" onclick="cerrarModal('modal-detalle-producto')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/semaforo.js"></script>
+</body>
+</html>
