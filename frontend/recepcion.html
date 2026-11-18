@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recepción | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Recepción de mercancía</h1>
+        <p class="subtitulo">Registro de compras y entradas de lotes a inventario PEPS con conversión automática a unidades base.</p>
+
+        <div id="alerta-recepcion"></div>
+
+        <!-- Formulario de registro -->
+        <div class="tarjeta" style="background:#fff; padding:20px; border-radius:12px; border:1px solid #e6dfd5; margin-bottom:24px;">
+          <h2 style="margin-top:0; font-size:1.1rem;">Nueva entrada de lote</h2>
+          <form id="form-recepcion" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:16px; align-items:end;">
+            <div>
+              <label for="rec-insumo" style="display:block; font-weight:600; margin-bottom:6px;">Insumo *</label>
+              <select id="rec-insumo" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;"></select>
+            </div>
+
+            <div>
+              <label for="rec-proveedor" style="display:block; font-weight:600; margin-bottom:6px;">Proveedor</label>
+              <select id="rec-proveedor" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;"></select>
+            </div>
+
+            <div>
+              <label for="rec-cantidad" style="display:block; font-weight:600; margin-bottom:6px;">Cantidad comprada *</label>
+              <input type="number" id="rec-cantidad" step="0.01" min="0.01" required placeholder="Ej: 2.5" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+            </div>
+
+            <div>
+              <label for="rec-unidad" style="display:block; font-weight:600; margin-bottom:6px;">Unidad de compra *</label>
+              <select id="rec-unidad" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+                <option value="kg">Kilogramos (kg → g)</option>
+                <option value="g">Gramos (g)</option>
+                <option value="L">Litros (L → ml)</option>
+                <option value="ml">Mililitros (ml)</option>
+                <option value="unidades">Unidades / Piezas</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="rec-costo" style="display:block; font-weight:600; margin-bottom:6px;">Costo unitario (unidad base) *</label>
+              <input type="number" id="rec-costo" step="0.0001" min="0" required placeholder="Ej: 0.25" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+            </div>
+
+            <div>
+              <label for="rec-caducidad" style="display:block; font-weight:600; margin-bottom:6px;">Fecha de caducidad</label>
+              <input type="date" id="rec-caducidad" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+            </div>
+
+            <div>
+              <label for="rec-factura" style="display:block; font-weight:600; margin-bottom:6px;">No. Factura / Nota</label>
+              <input type="text" id="rec-factura" placeholder="Ej: FAC-1045" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+            </div>
+
+            <div>
+              <button type="submit" class="btn btn-primario" style="width:100%; padding:11px; cursor:pointer;">+ Registrar entrada</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Tabla de lotes recientes -->
+        <div class="tarjeta" style="background:#fff; padding:20px; border-radius:12px; border:1px solid #e6dfd5;">
+          <h2 style="margin-top:0; font-size:1.1rem;">Lotes registrados en almacén (PEPS)</h2>
+          <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; text-align:left;">
+              <thead>
+                <tr style="border-bottom:2px solid #e6dfd5; color:#5c4d3c;">
+                  <th style="padding:10px;">Lote</th>
+                  <th style="padding:10px;">Insumo</th>
+                  <th style="padding:10px;">Proveedor</th>
+                  <th style="padding:10px;">Recibido</th>
+                  <th style="padding:10px;">Disponible</th>
+                  <th style="padding:10px;">Caducidad</th>
+                  <th style="padding:10px;">Factura</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-lotes-body">
+                <tr><td colspan="7" style="padding:12px;">Cargando lotes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/recepcion.js"></script>
+</body>
+</html>
