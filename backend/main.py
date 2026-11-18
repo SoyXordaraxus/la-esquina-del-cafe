@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routes import auth_tableros, ventas
+from routes import auth_tableros, ventas
 
 app = FastAPI(title="La Esquina del Café API")
 
