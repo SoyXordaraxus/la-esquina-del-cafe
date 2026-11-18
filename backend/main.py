@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth_tableros
+from backend.routes import auth_tableros, ventas
 
 app = FastAPI(title="La Esquina del Café API")
 
@@ -13,6 +13,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_tableros.router)
+app.include_router(ventas.router)
 
 @app.get("/")
 def health_check():
