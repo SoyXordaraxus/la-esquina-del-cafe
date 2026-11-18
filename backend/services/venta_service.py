@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -11,14 +12,36 @@ from models import (
     LoteInsumo,
     MovimientoInventario,
     Producto,
+    Merma,
     Receta,
+    Usuario,
     Venta,
 )
 
 FORMA_EFECTIVO = "Efectivo"
 FORMA_TARJETA = "Tarjeta externa"
 ESTADO_COMPLETADA = "completada"
+ESTADO_CANCELADA = "cancelada"
 TIPO_SALIDA_VENTA = "SALIDA_VENTA"
+TIPO_ENTRADA_CANCELACION = "ENTRADA_CANCELACION"
+TIPO_CANCELACION_A_MERMA = "CANCELACION_A_MERMA"
+ROL_ADMIN = "Administrador"
+
+# RF 5: estado del lote. models.py todavía NO tiene la columna lote_insumo.estado;
+# este código solo se activa cuando el dueño de models.py la agregue.
+LOTE_AGOTADO = "Agotado"
+LOTE_DISPONIBLE = "Disponible"
+
+# RF 18: la cancelación no usa texto libre, solo motivos de catálogo.
+MOTIVOS_CANCELACION = (
+    "Error de captura",
+    "Devolución del cliente",
+    "Producto en mal estado",
+)
+
+# El motivo que escribe registrar_venta() en cada movimiento: "Venta #12 (Lote #3)".
+# Sirve para saber de qué lote salió cada insumo (RF 3 historial y RF 9 restitución).
+_PATRON_MOV_VENTA = re.compile(r"^Venta #(\d+) \(Lote #(\d+)\)$")
 
 MENSAJE_STOCK = "Inventario insuficiente. No se realizó el cobro."
 
@@ -29,6 +52,18 @@ class ErrorVenta(Exception):
 
 class DatosInvalidos(ErrorVenta):
     """Comanda vacía, pago insuficiente, producto inexistente, etc."""
+
+
+class NoAutorizado(ErrorVenta):
+    """La acción requiere rol Administrador."""
+
+
+class NoEncontrado(ErrorVenta):
+    """La venta no existe."""
+
+
+class VentaYaCancelada(ErrorVenta):
+    """La venta ya estaba cancelada."""
 
 
 class StockInsuficiente(ErrorVenta):
@@ -54,6 +89,16 @@ def _normalizar_forma_pago(texto) -> str:
     if t in ("tarjeta externa", "tarjeta"):
         return FORMA_TARJETA
     raise DatosInvalidos("Forma de pago no válida. Use Efectivo o Tarjeta externa.")
+
+
+def _actualizar_estado_lote(lote) -> None:
+    """RF 5: marca el lote como Agotado al llegar a 0 (si la columna existe)."""
+    if not hasattr(LoteInsumo, "estado"):
+        return
+    if _dec(lote.cantidad_disponible) <= 0:
+        lote.estado = LOTE_AGOTADO
+    elif (lote.estado or "") == LOTE_AGOTADO:
+        lote.estado = LOTE_DISPONIBLE
 
 
 def _lote_vigente(hoy: date):
@@ -224,6 +269,7 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
 
         for lote, tomar, id_insumo in plan:
             lote.cantidad_disponible = _dec(lote.cantidad_disponible) - tomar
+            _actualizar_estado_lote(lote)
             db.add(MovimientoInventario(
                 id_insumo=id_insumo,
                 id_usuario=id_usuario,
@@ -246,6 +292,165 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
             "detalles": detalles,
         }
 
+    except Exception:
+        db.rollback()
+        raise
+
+# =====================================================================
+# RF 3 — Historial: la venta conserva precio e insumos usados
+# =====================================================================
+def _movimientos_de_venta(db: Session, id_venta: int) -> list:
+    """Salidas de inventario que generó la venta, con el lote de origen."""
+    movs = db.scalars(
+        select(MovimientoInventario)
+        .where(
+            MovimientoInventario.tipo_movimiento == TIPO_SALIDA_VENTA,
+            MovimientoInventario.motivo.like(f"Venta #{id_venta} (Lote #%"),
+        )
+        .order_by(MovimientoInventario.id_movimiento)
+    ).all()
+    resultado = []
+    for m in movs:
+        coincide = _PATRON_MOV_VENTA.match(m.motivo or "")
+        if coincide and int(coincide.group(1)) == id_venta:
+            resultado.append((m, int(coincide.group(2))))
+    return resultado
+
+
+def _venta_a_dict(db: Session, venta: Venta, con_insumos: bool) -> dict:
+    detalles = []
+    for d in db.scalars(select(DetalleVenta).where(DetalleVenta.id_venta == venta.id_venta)):
+        producto = db.get(Producto, d.id_producto)
+        detalles.append({
+            "id_producto": d.id_producto,
+            "nombre": producto.nombre if producto else f"Producto #{d.id_producto}",
+            "cantidad": d.cantidad,
+            "precio_unitario": float(d.precio_unitario),   # precio del día de la venta
+            "subtotal": float(d.subtotal),
+        })
+    usuario = db.get(Usuario, venta.id_usuario)
+    datos = {
+        "id_venta": venta.id_venta,
+        "fecha": venta.fecha_emision_ticket.isoformat(timespec="seconds") if venta.fecha_emision_ticket else None,
+        "usuario": usuario.nombre_usuario if usuario else str(venta.id_usuario),
+        "forma_pago": venta.forma_pago,
+        "total": float(venta.total),
+        "monto_recibido": float(venta.monto_recibido),
+        "cambio": float(venta.cambio),
+        "estado": venta.estado,
+        "detalles": detalles,
+    }
+    if con_insumos:
+        # Lo que realmente se descontó (receta vigente al momento de vender).
+        consumidos = defaultdict(Decimal)
+        for mov, _id_lote in _movimientos_de_venta(db, venta.id_venta):
+            consumidos[mov.id_insumo] += _dec(mov.cantidad)
+        datos["insumos_consumidos"] = []
+        for id_insumo, cantidad in consumidos.items():
+            insumo = db.get(Insumo, id_insumo)
+            datos["insumos_consumidos"].append({
+                "id_insumo": id_insumo,
+                "insumo": insumo.nombre if insumo else str(id_insumo),
+                "unidad": insumo.unidad_medida if insumo else None,
+                "cantidad": float(cantidad),
+            })
+    return datos
+
+
+def listar_ventas(db: Session, fecha: date = None, limite: int = 100) -> list:
+    consulta = select(Venta).order_by(Venta.id_venta.desc()).limit(limite)
+    if fecha is not None:
+        inicio = datetime.combine(fecha, datetime.min.time())
+        fin = datetime.combine(fecha, datetime.max.time())
+        consulta = consulta.where(Venta.fecha_emision_ticket.between(inicio, fin))
+    return [_venta_a_dict(db, v, con_insumos=False) for v in db.scalars(consulta)]
+
+
+def obtener_venta(db: Session, id_venta: int) -> dict:
+    venta = db.get(Venta, id_venta)
+    if venta is None:
+        raise NoEncontrado(f"La venta #{id_venta} no existe.")
+    return _venta_a_dict(db, venta, con_insumos=True)
+
+
+# =====================================================================
+# RF 9 — Cancelación / devolución (solo Administrador)
+# =====================================================================
+def cancelar_venta(db: Session, id_venta: int, id_usuario: int, motivo: str) -> dict:
+    """
+    No borra la venta: cambia su estado a 'cancelada'.
+    Regresa cada insumo al MISMO lote del que salió si el lote sigue vigente;
+    si el lote ya caducó, esa cantidad se registra como merma.
+    Todo en una sola transacción (RF 19).
+    """
+    if motivo not in MOTIVOS_CANCELACION:
+        raise DatosInvalidos("Motivo de cancelación no válido.")
+
+    hoy = date.today()
+    try:
+        usuario = db.get(Usuario, id_usuario)
+        if (
+            usuario is None
+            or (usuario.rol or "").strip().lower() != ROL_ADMIN.lower()
+            or (usuario.estado or "Activo").strip().lower() != "activo"
+        ):
+            raise NoAutorizado("Solo un Administrador puede cancelar ventas.")
+
+        venta = db.get(Venta, id_venta, with_for_update=True)
+        if venta is None:
+            raise NoEncontrado(f"La venta #{id_venta} no existe.")
+        if (venta.estado or "").lower() == ESTADO_CANCELADA:
+            raise VentaYaCancelada(f"La venta #{id_venta} ya estaba cancelada.")
+
+        ahora = datetime.now()
+        restituidos, a_merma = [], []
+
+        for mov, id_lote in _movimientos_de_venta(db, id_venta):
+            cantidad = _dec(mov.cantidad)
+            lote = db.get(LoteInsumo, id_lote, with_for_update=True)
+            vigente = lote is not None and (lote.caducidad is None or lote.caducidad >= hoy)
+
+            if vigente:
+                lote.cantidad_disponible = _dec(lote.cantidad_disponible) + cantidad
+                _actualizar_estado_lote(lote)
+                db.add(MovimientoInventario(
+                    id_insumo=mov.id_insumo,
+                    id_usuario=id_usuario,
+                    tipo_movimiento=TIPO_ENTRADA_CANCELACION,
+                    cantidad=cantidad,
+                    motivo=f"Cancelación venta #{id_venta} (Lote #{id_lote}) - {motivo}",
+                    fecha_movimiento=ahora,
+                ))
+                restituidos.append({"id_lote": id_lote, "id_insumo": mov.id_insumo, "cantidad": float(cantidad)})
+            else:
+                db.add(Merma(
+                    id_insumo=mov.id_insumo,
+                    id_lote=id_lote if lote is not None else None,
+                    id_usuario=id_usuario,
+                    cantidad=cantidad,
+                    motivo=f"Cancelación venta #{id_venta}: lote caducado",
+                    fecha=ahora,
+                ))
+                db.add(MovimientoInventario(
+                    id_insumo=mov.id_insumo,
+                    id_usuario=id_usuario,
+                    tipo_movimiento=TIPO_CANCELACION_A_MERMA,
+                    cantidad=cantidad,
+                    motivo=f"Cancelación venta #{id_venta} (Lote #{id_lote} caducado) - {motivo}",
+                    fecha_movimiento=ahora,
+                ))
+                a_merma.append({"id_lote": id_lote, "id_insumo": mov.id_insumo, "cantidad": float(cantidad)})
+
+        venta.estado = ESTADO_CANCELADA
+        db.commit()
+
+        return {
+            "id_venta": id_venta,
+            "estado": ESTADO_CANCELADA,
+            "motivo": motivo,
+            "restituidos": restituidos,
+            "enviados_a_merma": a_merma,
+        }
     except Exception:
         db.rollback()
         raise
