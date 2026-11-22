@@ -315,7 +315,8 @@ def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db), a
         )
         admin = next((a for a in administradores if verificar(datos.password_admin.strip(), a.contrasena)), None)
         if not admin:
-            raise HTTPException(status_code=401, detail="Contraseña de Administrador incorrecta. Operación anulada.")
+            # 403 y no 401: el 401 significa "sesión vencida" y el frontend cerraría la sesión del cajero
+            raise HTTPException(status_code=403, detail="Contraseña de Administrador incorrecta. Operación anulada.")
         id_autorizador = admin.id_usuario
 
     lote.cantidad_disponible = float(lote.cantidad_disponible) - datos.cantidad

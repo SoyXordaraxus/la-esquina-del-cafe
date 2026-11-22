@@ -63,17 +63,17 @@ async function enviarMerma(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
+  const data = await leerJsonSeguro(resp);
 
   if (!resp.ok) {
-    if (resp.status === 403 && (data.detail || "").includes("AUTORIZACION_REQUERIDA")) {
+    if (resp.status === 403 && typeof data.detail === "string" && data.detail.includes("AUTORIZACION_REQUERIDA")) {
       payloadPendiente = payload;
       document.getElementById("error-modal-admin").style.display = "none";
       document.getElementById("pass-admin-modal").value = "";
       abrirModal("modal-auth-admin");
       return false;
     }
-    throw new Error(data.detail || "No se pudo registrar la merma.");
+    throw new Error(mensajeError(data, "No se pudo registrar la merma.", resp.status));
   }
 
   cerrarModal("modal-auth-admin");
@@ -173,7 +173,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           const msg = document.getElementById("msg-merma");
           msg.className = "alerta-error";
           msg.style.display = "block";
-          msg.textContent = err.message;
+          msg.textContent = mensajeExcepcion(err);
         }
       },
     });
@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       await enviarMerma({ ...payloadPendiente, password_admin: pass });
     } catch (err) {
-      errModal.textContent = err.message;
+      errModal.textContent = mensajeExcepcion(err);
       errModal.style.display = "block";
     }
   });

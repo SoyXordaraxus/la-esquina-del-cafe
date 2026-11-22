@@ -154,8 +154,8 @@ function mostrarConfirmacion({ titulo = "Confirmar acción", mensaje = "¿Está 
 /* ---------- Sesión ---------- */
 function cerrarSesion() {
   try { localStorage.removeItem(CLAVE_SESION); } catch (e) { /* nada */ }
-  if (PAGINA_LOGIN) window.location.href = PAGINA_LOGIN;
-  else window.location.reload();
+  // replace: la pantalla actual no queda en el historial (el botón "Atrás" no regresa a ella)
+  window.location.replace(PAGINA_LOGIN || "login.html");
 }
 
 function cambiarRolDev(nuevoRol) {
@@ -274,3 +274,7 @@ function protegerPagina() {
 
 const PAGINA_PERMITIDA = protegerPagina();
 if (PAGINA_PERMITIDA) document.addEventListener("DOMContentLoaded", construirLayout);
+
+// "Atrás"/"Adelante" pueden mostrar la página desde el bfcache (event.persisted) sin volver
+// a ejecutar los scripts: se revisa otra vez la sesión y el rol cada vez que se muestra.
+window.addEventListener("pageshow", () => { protegerPagina(); });

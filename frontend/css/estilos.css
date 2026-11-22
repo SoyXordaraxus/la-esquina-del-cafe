@@ -165,7 +165,10 @@ body.modal-abierto { overflow: hidden; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 label { display: block; font-size: 0.8rem; color: var(--texto-suave); margin-bottom: 4px; }
-input[type="text"], input[type="number"], input[type="password"], input[type="date"], select, textarea {
+/* Todos los campos de texto comparten estilo (antes faltaban email, search, tel...) */
+input:not([type]), input[type="text"], input[type="email"], input[type="number"], input[type="password"],
+input[type="date"], input[type="time"], input[type="datetime-local"], input[type="search"],
+input[type="tel"], input[type="url"], select, textarea {
   width: 100%; padding: 10px 12px; font-size: 0.92rem; font-family: inherit;
   border: 1px solid var(--borde); border-radius: 8px; background: #fff;
 }

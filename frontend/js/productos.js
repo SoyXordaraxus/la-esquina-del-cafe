@@ -169,8 +169,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "No se pudo guardar el producto.");
+      const data = await leerJsonSeguro(resp);
+      if (!resp.ok) throw new Error(mensajeError(data, "No se pudo guardar el producto.", resp.status));
 
       cerrarModal("modal-producto");
       const msg = document.getElementById("msg-productos");
@@ -181,7 +181,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       msg.textContent = data.mensaje;
       await cargarProductosEInsumos();
     } catch (err) {
-      errBox.textContent = err.message;
+      errBox.textContent = mensajeExcepcion(err);
       errBox.style.display = "block";
     }
   });

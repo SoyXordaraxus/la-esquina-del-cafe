@@ -23,9 +23,9 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ usuario, contrasena }),
       });
 
-      const data = await resp.json();
+      const data = await leerJsonSeguro(resp);
       if (!resp.ok) {
-        throw new Error(data.detail || "Usuario o contraseña incorrectos.");
+        throw new Error(mensajeError(data, "Usuario o contraseña incorrectos.", resp.status));
       }
 
       const datos = data.usuario || data;
@@ -44,12 +44,12 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
 
       if (sesion.rol === "Administrador") {
-        window.location.href = "inicio.html";
+        window.location.replace("inicio.html");
       } else {
-        window.location.href = "caja.html";
+        window.location.replace("caja.html");
       }
     } catch (err) {
-      errorBox.textContent = err.message;
+      errorBox.textContent = mensajeExcepcion(err);
       errorBox.style.display = "block";
     } finally {
       btn.disabled = false;

@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +24,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Las páginas .html no se guardan en caché (ni en el bfcache del navegador): tras cerrar
+# sesión, "Atrás" debe pedirlas de nuevo y menu.js redirige a login.html.
+# css/js/imágenes sí se pueden cachear.
+@app.middleware("http")
+async def no_cachear_html(request: Request, call_next):
+    respuesta = await call_next(request)
+    ruta = request.url.path
+    if ruta.endswith(".html") or ruta.endswith("/"):
+        respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
 
 app.include_router(auth_tableros.router)
 app.include_router(ventas.router)

@@ -70,11 +70,11 @@ async function cargarVentas(fecha) {
   let ventas;
   try {
     const resp = await fetch(url);
-    if (!resp.ok) throw new Error();
+    if (!resp.ok) throw new Error(mensajeError(await leerJson(resp), "No se pudo consultar el historial.", resp.status));
     ventas = await resp.json();
   } catch (e) {
     cuerpo.innerHTML = `<tr><td colspan="7" class="vacio">Sin datos</td></tr>`;
-    mostrarError("error-ventas", "No se pudo consultar el historial. Verifique que el servidor esté encendido.");
+    mostrarError("error-ventas", mensajeExcepcion(e, "No se pudo consultar el historial."));
     return;
   }
 
@@ -116,9 +116,9 @@ async function verDetalle(idVenta) {
   try {
     const resp = await fetch(`${API_VENTAS}/${idVenta}`);
     v = await leerJson(resp);
-    if (!resp.ok) throw new Error(v.detail);
+    if (!resp.ok) throw new Error(mensajeError(v, "No se pudo consultar la venta.", resp.status));
   } catch (e) {
-    mostrarError("error-ventas", e.message || "No se pudo consultar la venta.");
+    mostrarError("error-ventas", mensajeExcepcion(e, "No se pudo consultar la venta."));
     return;
   }
 
@@ -193,7 +193,7 @@ async function enviarCancelacion(motivo) {
   ventaPorCancelar = null;
 
   if (!resp.ok) {
-    mostrarError("error-ventas", typeof data.detail === "string" ? data.detail : "No se pudo cancelar la venta.");
+    mostrarError("error-ventas", mensajeError(data, "No se pudo cancelar la venta.", resp.status));
     return;
   }
 

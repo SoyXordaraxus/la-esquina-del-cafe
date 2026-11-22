@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -322,6 +323,14 @@ def exportar_reporte(
 # =========================================================
 # 2. GESTIÓN DE USUARIOS (RF 1, RF 1.1, RF 14)
 # =========================================================
+PATRON_CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validar_correo(correo: str):
+    if not PATRON_CORREO.match(correo or ""):
+        raise HTTPException(status_code=400, detail="El correo electrónico no es válido. Ejemplo: nombre@dominio.com")
+
+
 def _validar_password_rf11(pwd: str):
     if len(pwd) < 8 or not any(c.isalpha() for c in pwd) or not any(c.isdigit() for c in pwd):
         raise HTTPException(
@@ -356,12 +365,13 @@ def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db), admi
     if not nombre or not correo:
         raise HTTPException(status_code=400, detail="Nombre de usuario y correo son obligatorios.")
 
+    _validar_correo(correo)
     _validar_password_rf11(datos.contrasena)
 
     if db.query(Usuario).filter(func.lower(Usuario.nombre_usuario) == nombre.lower()).first():
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso.")
+        raise HTTPException(status_code=409, detail=f"El nombre de usuario «{nombre}» ya está en uso. Elige otro.")
     if db.query(Usuario).filter(func.lower(Usuario.correo) == correo).first():
-        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
+        raise HTTPException(status_code=409, detail=f"El correo {correo} ya está registrado en otra cuenta.")
 
     rol_valido = "Administrador" if datos.rol == "Administrador" else "Cajero"
     nuevo = Usuario(
@@ -392,6 +402,9 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
 
     nombre = datos.nombre_usuario.strip()
     correo = datos.correo.strip().lower()
+    if not nombre or not correo:
+        raise HTTPException(status_code=400, detail="Nombre de usuario y correo son obligatorios.")
+    _validar_correo(correo)
 
     dup_user = (
         db.query(Usuario)
@@ -399,7 +412,7 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
         .first()
     )
     if dup_user:
-        raise HTTPException(status_code=400, detail="Otro usuario ya tiene ese nombre.")
+        raise HTTPException(status_code=409, detail=f"El nombre de usuario «{nombre}» ya está en uso. Elige otro.")
 
     dup_mail = (
         db.query(Usuario)
@@ -407,7 +420,7 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
         .first()
     )
     if dup_mail:
-        raise HTTPException(status_code=400, detail="Otro usuario ya usa ese correo.")
+        raise HTTPException(status_code=409, detail=f"El correo {correo} ya está registrado en otra cuenta.")
 
     if datos.contrasena and datos.contrasena.strip():
         _validar_password_rf11(datos.contrasena.strip())

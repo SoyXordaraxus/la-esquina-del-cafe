@@ -76,8 +76,8 @@ function confirmarEliminarInsumo(id) {
       try {
         const u = obtenerUsuario();
         const resp = await fetch(`${API_INSUMOS}/${id}?id_usuario=${u.id_usuario || 1}`, { method: "DELETE" });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || "No se pudo eliminar.");
+        const data = await leerJsonSeguro(resp);
+        if (!resp.ok) throw new Error(mensajeError(data, "No se pudo eliminar.", resp.status));
 
         msg.className = "badge-verde";
         msg.style.display = "block";
@@ -88,7 +88,7 @@ function confirmarEliminarInsumo(id) {
       } catch (err) {
         msg.className = "alerta-error";
         msg.style.display = "block";
-        msg.textContent = err.message;
+        msg.textContent = mensajeExcepcion(err);
       }
     },
   });
@@ -187,8 +187,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "No se pudo guardar el insumo.");
+      const data = await leerJsonSeguro(resp);
+      if (!resp.ok) throw new Error(mensajeError(data, "No se pudo guardar el insumo.", resp.status));
 
       cerrarModal("modal-insumo");
       const msg = document.getElementById("msg-insumos");
@@ -199,7 +199,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       msg.textContent = data.mensaje;
       await cargarInsumos();
     } catch (err) {
-      errBox.textContent = err.message;
+      errBox.textContent = mensajeExcepcion(err);
       errBox.style.display = "block";
     }
   });

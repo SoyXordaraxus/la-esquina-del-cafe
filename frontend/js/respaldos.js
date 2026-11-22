@@ -41,8 +41,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const resp = await fetch(`${API_BKP}/ejecutar?tipo=manual&id_usuario=${u.id_usuario || 1}`, {
         method: "POST",
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "Error al generar respaldo.");
+      const data = await leerJsonSeguro(resp);
+      if (!resp.ok) throw new Error(mensajeError(data, "Error al generar respaldo.", resp.status));
 
       msg.className = "badge-verde";
       msg.style.display = "block";
@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (err) {
       msg.className = "alerta-error";
       msg.style.display = "block";
-      msg.textContent = err.message;
+      msg.textContent = mensajeExcepcion(err);
     } finally {
       btn.disabled = false;
       btn.textContent = "Respaldar base de datos ahora";

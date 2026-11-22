@@ -94,3 +94,101 @@ function fechaHoraNegocio(iso, opciones = {}) {
     hour: "2-digit", minute: "2-digit", hour12: false, ...opciones,
   });
 }
+
+/* ---------- Mensajes de error del API ----------
+   Convierte cualquier respuesta de error en un texto legible en español:
+     - detail como texto (400, 401, 403, 404, 409 de nuestros endpoints)
+     - detail como lista de errores 422 de FastAPI/pydantic
+     - sin detail (500, respuesta vacía o no JSON) -> texto de respaldo */
+const CAMPOS_API = {
+  contrasena: ["La contraseña", "f"], correo: ["El correo electrónico", "m"],
+  nombre_usuario: ["El nombre de usuario", "m"], usuario: ["El usuario", "m"],
+  rol: ["El rol", "m"], estado: ["El estado", "m"],
+  nombre: ["El nombre", "m"], categoria: ["La categoría", "f"],
+  unidad_medida: ["La unidad base", "f"], unidad_compra: ["La unidad de compra", "f"],
+  factor_conversion: ["El factor de conversión", "m"], minimo_reposicion: ["El mínimo de reposición", "m"],
+  es_perecedero: ["El campo perecedero", "m"], precio_venta: ["El precio de venta", "m"],
+  receta: ["La receta", "f"], cantidad_necesaria: ["La cantidad de la receta", "f"],
+  id_insumo: ["El insumo", "m"], id_proveedor: ["El proveedor", "m"], id_lote: ["El lote", "m"],
+  id_producto: ["El producto", "m"], cantidad: ["La cantidad", "f"],
+  cantidad_ingresada: ["La cantidad recibida", "f"], costo_unitario: ["El costo unitario", "m"],
+  caducidad: ["La fecha de caducidad", "f"], numero_factura: ["El número de factura", "m"],
+  motivo: ["El motivo", "m"], notas: ["Las notas", "fp"], password_admin: ["La contraseña del Administrador", "f"],
+  forma_pago: ["La forma de pago", "f"], monto_recibido: ["El monto recibido", "m"],
+  detalles: ["La comanda", "f"], fecha: ["La fecha", "f"],
+  fecha_inicio: ["La fecha de inicio", "f"], fecha_fin: ["La fecha final", "f"],
+};
+
+const MENSAJES_POR_ESTADO = {
+  400: "Los datos enviados no son válidos.",
+  401: "Tu sesión expiró. Inicia sesión de nuevo.",
+  403: "No tienes permiso para realizar esta acción.",
+  404: "No se encontró el recurso solicitado.",
+  409: "El registro ya existe o entra en conflicto con otro.",
+  422: "Revisa los datos del formulario.",
+  500: "Error interno del servidor. Intenta de nuevo.",
+};
+
+function _campoApi(loc) {
+  const partes = (Array.isArray(loc) ? loc : []).filter(p => !["body", "query", "path"].includes(p));
+  const clave = [...partes].reverse().find(p => typeof p === "string");
+  if (clave && CAMPOS_API[clave]) return CAMPOS_API[clave];
+  if (clave) return [`El campo «${clave.replace(/_/g, " ")}»`, "m"];
+  return ["El dato enviado", "m"];
+}
+
+function _errorPydantic(e) {
+  if (!e || typeof e !== "object") return String(e || "");
+  const [campo, genero] = _campoApi(e.loc);
+  const ctx = e.ctx || {};
+  const oblig = genero === "f" ? "obligatoria" : genero === "fp" ? "obligatorias" : "obligatorio";
+  const valida = genero === "f" ? "válida" : genero === "fp" ? "válidas" : "válido";
+  const debe = genero === "fp" ? "deben" : "debe";
+  switch (e.type) {
+    case "missing": return `${campo} es ${oblig}.`;
+    case "string_too_short":
+      return Number(ctx.min_length) <= 1 ? `${campo} es ${oblig}.` : `${campo} ${debe} tener al menos ${ctx.min_length} caracteres.`;
+    case "string_too_long": return `${campo} no puede tener más de ${ctx.max_length} caracteres.`;
+    case "too_short":
+      return Number(ctx.min_length) === 1 ? `${campo} ${debe} tener al menos un elemento.` : `${campo} ${debe} tener al menos ${ctx.min_length} elementos.`;
+    case "greater_than": return Number(ctx.gt) === 0 ? `${campo} ${debe} ser mayor a cero.` : `${campo} ${debe} ser mayor a ${ctx.gt}.`;
+    case "greater_than_equal": return `${campo} ${debe} ser mayor o igual a ${ctx.ge}.`;
+    case "less_than": return `${campo} ${debe} ser menor a ${ctx.lt}.`;
+    case "less_than_equal": return `${campo} ${debe} ser menor o igual a ${ctx.le}.`;
+    case "int_parsing": case "int_type": case "int_from_float": return `${campo} ${debe} ser un número entero.`;
+    case "float_parsing": case "float_type": case "decimal_parsing": case "decimal_type": return `${campo} ${debe} ser un número válido.`;
+    case "date_parsing": case "date_type": case "date_from_datetime_parsing": case "date_from_datetime_inexact":
+      return `${campo} no es una fecha válida.`;
+    case "bool_parsing": case "bool_type": return `${campo} ${debe} ser sí o no.`;
+    case "string_type": return `${campo} ${debe} ser texto.`;
+    case "string_pattern_mismatch": return `${campo} no tiene el formato correcto.`;
+    case "json_invalid": return "Los datos enviados no tienen un formato válido.";
+    case "value_error": return String(e.msg || "").replace(/^Value error,\s*/i, "") || `${campo} no es ${valida}.`;
+    default: return `${campo} no es ${valida}.`;
+  }
+}
+
+function mensajeError(data, respaldo = "Ocurrió un error. Intenta de nuevo.", estado = null) {
+  const detalle = data && typeof data === "object" ? data.detail : data;
+  if (typeof detalle === "string" && detalle.trim()) return detalle.trim();
+  if (Array.isArray(detalle) && detalle.length) {
+    const textos = [...new Set(detalle.map(_errorPydantic).filter(Boolean))];
+    if (textos.length) return textos.join(" ");
+  }
+  if (detalle && typeof detalle === "object" && typeof detalle.msg === "string") return detalle.msg;
+  if (data && typeof data === "object" && typeof data.mensaje === "string" && data.mensaje) return data.mensaje;
+  return (estado && MENSAJES_POR_ESTADO[estado]) || respaldo;
+}
+
+// resp.json() sin tronar si el servidor respondió vacío o con texto (p. ej. un 500)
+async function leerJsonSeguro(resp) {
+  try { return await resp.json(); } catch (e) { return {}; }
+}
+
+// Texto para un catch: fallo de red -> mensaje de conexión; Error propio -> su mensaje
+function mensajeExcepcion(err, respaldo = "No se pudo completar la operación.") {
+  if (err instanceof TypeError && /fetch|network|load failed/i.test(err.message || "")) {
+    return "No se pudo conectar con el servidor. Verifica que esté encendido.";
+  }
+  return (err && err.message) || respaldo;
+}

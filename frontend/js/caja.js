@@ -304,10 +304,8 @@ async function procesarVenta() {
   if (!resp.ok) {
     cerrarModal("modal-cobro");
     const alertaStock = document.getElementById("alerta-stock");
-    // "detail" es texto en 400/409; en otros errores puede ser una lista u omitirse
-    alertaStock.textContent = (typeof data.detail === "string" && data.detail)
-      ? data.detail
-      : "No se realizó el cobro. Revise la comanda e intente de nuevo.";
+    // 409 sin stock, 400 datos inválidos, 422 de validación o 500: siempre texto legible
+    alertaStock.textContent = mensajeError(data, "No se realizó el cobro. Revise la comanda e intente de nuevo.", resp.status);
     alertaStock.style.display = "block";
     cargarProductos();   // vuelve a pedir el catálogo: los productos sin stock se ponen en gris
     return;
