@@ -1,6 +1,7 @@
+import os
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -9,10 +10,18 @@ from models import Usuario, Insumo, LoteInsumo, Venta, Merma, Bitacora
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 
+CODIGO_MAESTRO_RECUPERACION = os.getenv("CODIGO_MAESTRO", "CAFE-MAESTRO-2026")
+
 
 class LoginSchema(BaseModel):
     usuario: str
     contrasena: str
+
+
+class RecuperarContrasenaSchema(BaseModel):
+    usuario: str = Field(..., min_length=1)
+    codigo_maestro: str = Field(..., min_length=1)
+    nueva_contrasena: str = Field(..., min_length=8)
 
 
 def registrar_bitacora(db: Session, id_usuario: int, accion: str, detalle: str):
@@ -20,7 +29,7 @@ def registrar_bitacora(db: Session, id_usuario: int, accion: str, detalle: str):
 
 
 # ==========================================
-# 0. INICIO DE SESIÓN (RF 1, RF 1.1, RF 1.2, RF 13)
+# 0. INICIO DE SESIÓN Y RECUPERACIÓN (RF 1, RF 1.1, RF 1.2, RF 13)
 # ==========================================
 @router.post("/auth/login")
 def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
@@ -57,6 +66,44 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         "correo": usuario.correo,
         "rol": rol_norm,
     }
+
+
+@router.post("/auth/recuperar")
+def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends(get_db)):
+    if (datos.codigo_maestro or "").strip() != CODIGO_MAESTRO_RECUPERACION:
+        raise HTTPException(status_code=403, detail="El Código Maestro de recuperación es incorrecto.")
+
+    user_input = (datos.usuario or "").strip()
+    nueva_pass = (datos.nueva_contrasena or "").strip()
+
+    if not user_input or len(nueva_pass) < 8:
+        raise HTTPException(status_code=400, detail="Usuario requerido y nueva contraseña de al menos 8 caracteres.")
+
+    usuario = (
+        db.query(Usuario)
+        .filter(
+            (func.lower(Usuario.nombre_usuario) == user_input.lower()) |
+            (func.lower(Usuario.correo) == user_input.lower())
+        )
+        .first()
+    )
+
+    if not usuario:
+        raise HTTPException(status_code=404, detail="No se encontró ningún usuario o correo registrado con ese dato.")
+
+    if (usuario.estado or "").lower() != "activo":
+        raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
+
+    usuario.contrasena = nueva_pass
+    registrar_bitacora(
+        db,
+        usuario.id_usuario,
+        "RECUPERACION_CONTRASENA",
+        f"Restablecimiento local de contraseña mediante Código Maestro para '{usuario.nombre_usuario}'."
+    )
+    db.commit()
+
+    return {"mensaje": f"Contraseña actualizada correctamente para {usuario.nombre_usuario}. Ya puedes iniciar sesión."}
 
 
 # ==========================================
