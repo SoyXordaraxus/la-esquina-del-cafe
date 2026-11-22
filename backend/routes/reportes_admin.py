@@ -1,22 +1,22 @@
 import re
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import get_db, engine
+from database import get_db
 from services.bitacora import registrar_bitacora
 from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear
 from services.reportes_export import (
     cantidades_por_unidad, dinero, fecha_dmy, generar_csv, generar_pdf, meta_reporte, nombre_archivo, numero,
 )
 from services.sesion import requiere_admin
-from services.tiempo import ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
+from services import respaldos
+from services.tiempo import NOMBRE_ZONA, ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
 from models import (
     Usuario,
     Insumo,
@@ -35,8 +35,6 @@ router = APIRouter(
     dependencies=[Depends(requiere_admin)],
 )
 
-CARPETA_BACKUPS = Path(__file__).resolve().parent.parent / "backups"
-CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
 
 
 class UsuarioCrearSchema(BaseModel):
@@ -421,32 +419,31 @@ def consultar_bitacora(
 
 
 # =========================================================
-# 4. RESPALDOS LOCALES DE BASE DE DATOS (RF 21)
+# 4. RESPALDOS DE BASE DE DATOS (RF 21) - lógica en services/respaldos.py
 # =========================================================
-def _limpiar_respaldos_antiguos(dias_retencion: int = 30):
-    limite = datetime.now().timestamp() - (dias_retencion * 86400)
-    for archivo in CARPETA_BACKUPS.glob("respaldo_*.sql"):
-        if archivo.stat().st_mtime < limite:
-            archivo.unlink(missing_ok=True)
+generar_respaldo = respaldos.generar_respaldo   # usado por main.py (respaldo al cerrar)
 
 
 @router.get("/respaldos")
 def listar_respaldos():
-    _limpiar_respaldos_antiguos(30)
-    archivos = sorted(CARPETA_BACKUPS.glob("respaldo_*.sql"), key=lambda p: p.stat().st_mtime, reverse=True)
+    respaldos.limpiar_antiguos(respaldos.CARPETA_BACKUPS)
     lista = []
-    for idx, f in enumerate(archivos, start=1):
+    for f in respaldos.archivos_locales():
         stat = f.stat()
-        dt = datetime.fromtimestamp(stat.st_mtime, ZONA_NEGOCIO)
-        tam_kb = round(stat.st_size / 1024, 1)
+        info = respaldos.info_nombre(f.name)
+        fecha = info["fecha"] if info else datetime.fromtimestamp(stat.st_mtime, ZONA_NEGOCIO)
+        tipo = info["tipo"] if info else "desconocido"
+        externa = respaldos.esta_en_externa(f.name)
         lista.append({
             "archivo": f.name,
-            "folio": f"BKP-{idx:04d}",
-            "fecha": dt.strftime("%d/%m/%Y %H:%M"),
-            "tipo": "Manual de DB" if "_manual_" in f.name else "Automático Diario",
+            "folio": respaldos.folio(f.name),
+            "fecha": fecha.strftime("%d/%m/%Y %H:%M"),
+            "tipo_clave": tipo,
+            "tipo": respaldos.etiqueta_tipo(tipo),
             "estado": "COMPLETADO",
-            "ubicacion": f"Local ({f.name})",
-            "tamano": f"{tam_kb} KB",
+            "externa": externa,
+            "ubicacion": "Local + externa" if externa else "Local",
+            "tamano": f"{round(stat.st_size / 1024, 1)} KB",
         })
     return {
         "estado_servidor": "ESTABLE",
@@ -455,91 +452,37 @@ def listar_respaldos():
     }
 
 
-def _sql_valor(v) -> str:
-    if v is None:
-        return "NULL"
-    if isinstance(v, bool):
-        return "1" if v else "0"
-    if isinstance(v, (int, float)):
-        return str(v)
-    esc = str(v).replace("\\", "\\\\").replace("'", "\\'")
-    return f"'{esc}'"
-
-
-def _volcado_mysql() -> list:
-    lineas = ["SET FOREIGN_KEY_CHECKS=0;\n"]
-    with engine.connect() as conn:
-        tablas = [row[0] for row in conn.execute(text("SHOW TABLES")).fetchall()]
-        for tabla in tablas:
-            create_sql = conn.execute(text(f"SHOW CREATE TABLE `{tabla}`")).fetchone()[1]
-            lineas.append(f"DROP TABLE IF EXISTS `{tabla}`;")
-            lineas.append(f"{create_sql};\n")
-
-            resultado = conn.execute(text(f"SELECT * FROM `{tabla}`"))
-            nombres_cols = ", ".join(f"`{c}`" for c in resultado.keys())
-            filas = resultado.fetchall()
-            for fila in filas:
-                vals = ", ".join(_sql_valor(v) for v in fila)
-                lineas.append(f"INSERT INTO `{tabla}` ({nombres_cols}) VALUES ({vals});")
-            if filas:
-                lineas.append("")
-    lineas.append("SET FOREIGN_KEY_CHECKS=1;\n")
-    return lineas
-
-
-def _volcado_sqlite() -> list:
-    # sqlite3 trae su propio volcado SQL (esquema + datos) desde sqlite_master
-    crudo = engine.raw_connection()
-    try:
-        return list(crudo.driver_connection.iterdump())
-    finally:
-        crudo.close()
-
-
-def generar_respaldo(db: Session, tipo: str, id_usuario: int) -> dict:
-    """RF 21: escribe backups/respaldo_<tipo>_<fecha>.sql. Funciona con MySQL y SQLite."""
-    CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
-    ahora = ahora_local()
-    nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
-    ruta = CARPETA_BACKUPS / nombre
-
-    motor = engine.dialect.name
-    if motor == "mysql":
-        cuerpo = _volcado_mysql()
-    elif motor == "sqlite":
-        cuerpo = _volcado_sqlite()
-    else:
-        raise HTTPException(status_code=500, detail=f"Respaldo no soportado para el motor {motor}.")
-
-    lineas = [
-        "-- Respaldo Local La Esquina del Cafe",
-        f"-- Generado: {ahora.isoformat(timespec='seconds')}",
-        f"-- Motor: {motor}\n",
-        *cuerpo,
-    ]
-    ruta.write_text("\n".join(lineas), encoding="utf-8")
-    _limpiar_respaldos_antiguos(30)
-
-    db.add(Bitacora(
-        id_usuario=id_usuario,
-        accion="RESPALDO_DB",
-        detalle=f"Copia de seguridad generada: {nombre}",
-    ))
-    db.commit()
-
-    return {"mensaje": f"Respaldo generado correctamente: {nombre}", "archivo": nombre}
+@router.get("/respaldos/estado")
+def estado_respaldos():
+    ultimo = respaldos.ultimo_diario()
+    info = respaldos.info_nombre(ultimo.name) if ultimo else None
+    ext = respaldos.estado_externa()
+    proximo = respaldos.proximo_respaldo()
+    return {
+        "hora_programada": respaldos.hora_programada().strftime("%H:%M"),
+        "zona_horaria": NOMBRE_ZONA,
+        "proximo_respaldo": proximo.strftime("%d/%m/%Y %H:%M"),
+        "proximo_pendiente": proximo <= ahora_local().replace(tzinfo=None),
+        "ultimo_diario": info["fecha"].strftime("%d/%m/%Y %H:%M") if info else None,
+        "ultimo_diario_archivo": ultimo.name if ultimo else None,
+        "unidad_externa": ext,
+        "retencion_dias": respaldos.DIAS_RETENCION,
+    }
 
 
 @router.post("/respaldos/ejecutar")
 def ejecutar_respaldo_sql(tipo: str = "manual", db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
-    return generar_respaldo(db, tipo, admin.id_usuario)
+    # Desde la pantalla solo se generan respaldos manuales; diario y al cerrar son automáticos.
+    if tipo != "manual":
+        raise HTTPException(status_code=400, detail="Desde la pantalla solo se pueden generar respaldos manuales.")
+    return respaldos.generar_respaldo(db, "manual", admin.id_usuario)
 
 
 @router.get("/respaldos/descargar/{nombre_archivo}")
 def descargar_respaldo(nombre_archivo: str):
     if "/" in nombre_archivo or "\\" in nombre_archivo or not nombre_archivo.endswith(".sql"):
         raise HTTPException(status_code=400, detail="Nombre de archivo no válido.")
-    ruta = CARPETA_BACKUPS / nombre_archivo
+    ruta = respaldos.CARPETA_BACKUPS / nombre_archivo
     if not ruta.exists():
         raise HTTPException(status_code=404, detail="Archivo de respaldo no encontrado.")
     return Response(

@@ -8,7 +8,7 @@
   <style>
     .estado-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 14px;
       margin-bottom: 16px;
     }
@@ -18,7 +18,10 @@
       border-radius: 12px;
       padding: 16px 18px;
     }
+    @media (max-width: 1000px) { .estado-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 750px) { .estado-grid { grid-template-columns: 1fr; } }
+    .estado-box .etiqueta { font-size:0.84rem; color:var(--texto-suave); }
+    .estado-box .valor { margin-top:6px; }
   </style>
 </head>
 <body>
@@ -28,18 +31,34 @@
     <main class="contenido">
       <section class="pantalla">
         <h1>Estado del servidor y respaldos</h1>
-        <p class="subtitulo">Copias de seguridad locales de la base de datos (histórico de últimos 30 días).</p>
+        <p class="subtitulo">Copias de seguridad de la base de datos: automáticas cada día y al cerrar el sistema, más las manuales. Histórico de los últimos 30 días en local y en la unidad externa.</p>
 
         <div id="msg-respaldo" style="display:none; margin-bottom:14px;"></div>
 
-        <div class="estado-grid">
+        <div class="estado-grid" id="estado-respaldos">
           <div class="estado-box">
-            <span style="font-size:0.84rem; color:var(--texto-suave);">Estado del servidor local</span>
-            <div style="margin-top:6px;"><span class="badge badge-verde" id="lbl-estado-srv">ESTABLE · Operación local</span></div>
+            <span class="etiqueta">Estado del servidor local</span>
+            <div class="valor"><span class="badge badge-verde" id="lbl-estado-srv">ESTABLE · Operación local</span></div>
           </div>
           <div class="estado-box">
-            <span style="font-size:0.84rem; color:var(--texto-suave);">Último respaldo generado</span>
-            <div style="margin-top:6px;"><strong id="lbl-ultimo-bkp">—</strong></div>
+            <span class="etiqueta">Último respaldo generado</span>
+            <div class="valor"><strong id="lbl-ultimo-bkp">—</strong></div>
+          </div>
+          <div class="estado-box">
+            <span class="etiqueta">Hora programada (respaldo diario)</span>
+            <div class="valor"><strong id="lbl-hora-programada">—</strong></div>
+          </div>
+          <div class="estado-box">
+            <span class="etiqueta">Próximo respaldo diario</span>
+            <div class="valor"><strong id="lbl-proximo-bkp">—</strong></div>
+          </div>
+          <div class="estado-box">
+            <span class="etiqueta">Último respaldo diario</span>
+            <div class="valor"><strong id="lbl-ultimo-diario">—</strong></div>
+          </div>
+          <div class="estado-box">
+            <span class="etiqueta">Unidad externa</span>
+            <div class="valor"><span class="badge" id="lbl-unidad-externa">—</span></div>
           </div>
         </div>
 
@@ -60,7 +79,8 @@
                   <th>Fecha / Hora</th>
                   <th>Tipo de respaldo</th>
                   <th>Estado</th>
-                  <th>Ubicación / Folio</th>
+                  <th>Folio</th>
+                  <th>Ubicación</th>
                   <th>Tamaño</th>
                   <th>Descarga</th>
                 </tr>
