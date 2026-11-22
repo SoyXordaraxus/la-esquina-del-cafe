@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from models import (
+    DetalleConsumoPeps,
     DetalleVenta,
     Insumo,
     LoteInsumo,
@@ -17,6 +18,7 @@ from models import (
     Usuario,
     Venta,
 )
+from services.bitacora import registrar_bitacora
 
 FORMA_EFECTIVO = "Efectivo"
 FORMA_TARJETA = "Tarjeta externa"
@@ -27,10 +29,11 @@ TIPO_ENTRADA_CANCELACION = "ENTRADA_CANCELACION"
 TIPO_CANCELACION_A_MERMA = "CANCELACION_A_MERMA"
 ROL_ADMIN = "Administrador"
 
-# RF 5: estado del lote. models.py todavía NO tiene la columna lote_insumo.estado;
-# este código solo se activa cuando el dueño de models.py la agregue.
+# RF 5 / RF 6: estado del lote
 LOTE_AGOTADO = "Agotado"
 LOTE_DISPONIBLE = "Disponible"
+LOTE_CADUCADO = "Caducado"
+MOTIVO_MERMA_CADUCIDAD = "Caducidad"   # del catálogo MOTIVOS_MERMA de almacen.py
 
 # RF 18: la cancelación no usa texto libre, solo motivos de catálogo.
 MOTIVOS_CANCELACION = (
@@ -39,8 +42,9 @@ MOTIVOS_CANCELACION = (
     "Producto en mal estado",
 )
 
-# El motivo que escribe registrar_venta() en cada movimiento: "Venta #12 (Lote #3)".
-# Sirve para saber de qué lote salió cada insumo (RF 3 historial y RF 9 restitución).
+# Texto del motivo de cada movimiento de venta: "Venta #12 (Lote #3)".
+# El origen real de cada descuento está en detalle_consumo_peps; el patrón solo se usa
+# para ventas antiguas registradas antes de que existiera esa tabla.
 _PATRON_MOV_VENTA = re.compile(r"^Venta #(\d+) \(Lote #(\d+)\)$")
 
 MENSAJE_STOCK = "Inventario insuficiente. No se realizó el cobro."
@@ -92,9 +96,7 @@ def _normalizar_forma_pago(texto) -> str:
 
 
 def _actualizar_estado_lote(lote) -> None:
-    """RF 5: marca el lote como Agotado al llegar a 0 (si la columna existe)."""
-    if not hasattr(LoteInsumo, "estado"):
-        return
+    """RF 5: Agotado al llegar a 0; vuelve a Disponible si recupera existencias."""
     if _dec(lote.cantidad_disponible) <= 0:
         lote.estado = LOTE_AGOTADO
     elif (lote.estado or "") == LOTE_AGOTADO:
@@ -102,13 +104,28 @@ def _actualizar_estado_lote(lote) -> None:
 
 
 def _lote_vigente(hoy: date):
-    return or_(LoteInsumo.caducidad.is_(None), LoteInsumo.caducidad >= hoy)
+    """Lotes que pueden surtir una venta: no vencidos y ni Caducados ni Agotados."""
+    return (
+        or_(LoteInsumo.caducidad.is_(None), LoteInsumo.caducidad >= hoy),
+        or_(LoteInsumo.estado.is_(None), LoteInsumo.estado.notin_((LOTE_CADUCADO, LOTE_AGOTADO))),
+    )
+
+
+def _lote_caducado(lote, hoy: date) -> bool:
+    return (lote.estado or "") == LOTE_CADUCADO or (lote.caducidad is not None and lote.caducidad < hoy)
+
+
+def _costo_base(lote, insumo) -> Decimal:
+    """costo_unitario es por unidad de compra; se divide entre factor_conversion (RF 2)."""
+    factor = _dec(insumo.factor_conversion or 1) if insumo is not None else Decimal("1")
+    costo = _dec(lote.costo_unitario)
+    return costo / factor if factor > 0 else costo
 
 
 def _stock_vigente_por_insumo(db: Session, hoy: date) -> dict:
     filas = db.execute(
         select(LoteInsumo.id_insumo, func.coalesce(func.sum(LoteInsumo.cantidad_disponible), 0))
-        .where(LoteInsumo.cantidad_disponible > 0, _lote_vigente(hoy))
+        .where(LoteInsumo.cantidad_disponible > 0, *_lote_vigente(hoy))
         .group_by(LoteInsumo.id_insumo)
     ).all()
     return {id_insumo: _dec(cantidad) for id_insumo, cantidad in filas}
@@ -192,18 +209,17 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
         for r in recetas:
             requerido[r.id_insumo] += _dec(r.cantidad_necesaria) * pedido[r.id_producto]
 
-        # 4. Plan de descuento PEPS (caducidad más próxima y entrada más antigua primero)
-        plan = []
+        # 4. Validar existencias PEPS (caducidad más próxima y entrada más antigua primero)
+        lotes_por_insumo = {}
         faltantes = []
         for id_insumo in sorted(requerido):
             necesario = requerido[id_insumo]
-            restante = necesario
             lotes = db.scalars(
                 select(LoteInsumo)
                 .where(
                     LoteInsumo.id_insumo == id_insumo,
                     LoteInsumo.cantidad_disponible > 0,
-                    _lote_vigente(hoy),
+                    *_lote_vigente(hoy),
                 )
                 .order_by(
                     LoteInsumo.caducidad.is_(None).asc(),
@@ -213,27 +229,22 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
                 )
                 .with_for_update()
             ).all()
+            lotes_por_insumo[id_insumo] = lotes
+            disponible = sum((_dec(l.cantidad_disponible) for l in lotes), Decimal("0"))
 
-            for lote in lotes:
-                if restante <= 0:
-                    break
-                tomar = min(_dec(lote.cantidad_disponible), restante)
-                plan.append((lote, tomar, id_insumo))
-                restante -= tomar
-
-            if restante > 0:
+            if disponible < necesario:
                 insumo = db.get(Insumo, id_insumo)
                 faltantes.append({
                     "insumo": insumo.nombre if insumo else str(id_insumo),
                     "unidad": getattr(insumo, "unidad_medida", None),
                     "necesario": float(necesario),
-                    "disponible": float(necesario - restante),
+                    "disponible": float(disponible),
                 })
 
         if faltantes:
             raise StockInsuficiente(faltantes)
 
-        # 5. Guardar Venta, Detalles y Movimientos ACID
+        # 5. Guardar Venta, Detalles, consumo PEPS y Movimientos (una sola transacción)
         ahora = datetime.now()
         venta = Venta(
             id_usuario=id_usuario,
@@ -247,18 +258,24 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
         db.add(venta)
         db.flush()
 
+        recetas_por_producto = defaultdict(list)
+        for r in recetas:
+            recetas_por_producto[r.id_producto].append(r)
+
         detalles = []
         for id_producto, cantidad in pedido.items():
             producto = productos[id_producto]
             precio = _dinero(producto.precio_venta)
             subtotal = _dinero(precio * cantidad)
-            db.add(DetalleVenta(
+            detalle = DetalleVenta(
                 id_venta=venta.id_venta,
                 id_producto=id_producto,
                 cantidad=cantidad,
                 precio_unitario=precio,
                 subtotal=subtotal,
-            ))
+            )
+            db.add(detalle)
+            db.flush()
             detalles.append({
                 "id_producto": id_producto,
                 "nombre": producto.nombre,
@@ -267,17 +284,41 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
                 "subtotal": float(subtotal),
             })
 
-        for lote, tomar, id_insumo in plan:
-            lote.cantidad_disponible = _dec(lote.cantidad_disponible) - tomar
-            _actualizar_estado_lote(lote)
-            db.add(MovimientoInventario(
-                id_insumo=id_insumo,
-                id_usuario=id_usuario,
-                tipo_movimiento=TIPO_SALIDA_VENTA,
-                cantidad=tomar,
-                motivo=f"Venta #{venta.id_venta} (Lote #{lote.id_lote})",
-                fecha_movimiento=ahora,
-            ))
+            # Descuento PEPS de cada insumo de la receta, ligado a este renglón de venta
+            for r in recetas_por_producto[id_producto]:
+                insumo = db.get(Insumo, r.id_insumo)
+                restante = _dec(r.cantidad_necesaria) * cantidad
+                for lote in lotes_por_insumo[r.id_insumo]:
+                    if restante <= 0:
+                        break
+                    saldo = _dec(lote.cantidad_disponible)
+                    if saldo <= 0:
+                        continue
+                    tomar = min(saldo, restante)
+                    restante -= tomar
+                    lote.cantidad_disponible = saldo - tomar
+                    _actualizar_estado_lote(lote)
+                    db.add(DetalleConsumoPeps(
+                        id_detalle_venta=detalle.id_detalle,
+                        id_lote=lote.id_lote,
+                        cantidad_descontada=tomar,
+                        costo_aplicado=_dinero(tomar * _costo_base(lote, insumo)),
+                    ))
+                    db.add(MovimientoInventario(
+                        id_insumo=r.id_insumo,
+                        id_lote=lote.id_lote,
+                        id_venta=venta.id_venta,
+                        id_usuario=id_usuario,
+                        tipo_movimiento=TIPO_SALIDA_VENTA,
+                        cantidad=tomar,
+                        motivo=f"Venta #{venta.id_venta} (Lote #{lote.id_lote})",
+                        fecha_movimiento=ahora,
+                    ))
+
+        registrar_bitacora(
+            db, id_usuario, "VENTA_REGISTRADA",
+            f"Venta #{venta.id_venta} · ${total:.2f} · {forma} · {sum(pedido.values())} artículo(s)",
+        )
 
         db.commit()
         db.refresh(venta)
@@ -299,8 +340,27 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
 # =====================================================================
 # RF 3 — Historial: la venta conserva precio e insumos usados
 # =====================================================================
+def _consumos_de_venta(db: Session, id_venta: int, bloquear: bool = False) -> list:
+    """
+    Lo que se descontó de cada lote: [(id_insumo, id_lote, cantidad, costo_aplicado)].
+    Fuente: detalle_consumo_peps. Para ventas anteriores a esa tabla se usan los
+    movimientos SALIDA_VENTA (costo_aplicado = None).
+    """
+    filas = db.execute(
+        select(LoteInsumo.id_insumo, DetalleConsumoPeps.id_lote,
+               DetalleConsumoPeps.cantidad_descontada, DetalleConsumoPeps.costo_aplicado)
+        .join(DetalleVenta, DetalleVenta.id_detalle == DetalleConsumoPeps.id_detalle_venta)
+        .join(LoteInsumo, LoteInsumo.id_lote == DetalleConsumoPeps.id_lote)
+        .where(DetalleVenta.id_venta == id_venta)
+        .order_by(DetalleConsumoPeps.id_consumo)
+    ).all()
+    if filas:
+        return [(i, l, _dec(c), _dec(costo)) for i, l, c, costo in filas]
+    return [(m.id_insumo, id_lote, _dec(m.cantidad), None) for m, id_lote in _movimientos_de_venta(db, id_venta)]
+
+
 def _movimientos_de_venta(db: Session, id_venta: int) -> list:
-    """Salidas de inventario que generó la venta, con el lote de origen."""
+    """(Ventas antiguas) Salidas de inventario de la venta, con el lote tomado del motivo."""
     movs = db.scalars(
         select(MovimientoInventario)
         .where(
@@ -343,8 +403,8 @@ def _venta_a_dict(db: Session, venta: Venta, con_insumos: bool) -> dict:
     if con_insumos:
         # Lo que realmente se descontó (receta vigente al momento de vender).
         consumidos = defaultdict(Decimal)
-        for mov, _id_lote in _movimientos_de_venta(db, venta.id_venta):
-            consumidos[mov.id_insumo] += _dec(mov.cantidad)
+        for id_insumo, _id_lote, cantidad, _costo in _consumos_de_venta(db, venta.id_venta):
+            consumidos[id_insumo] += cantidad
         datos["insumos_consumidos"] = []
         for id_insumo, cantidad in consumidos.items():
             insumo = db.get(Insumo, id_insumo)
@@ -405,43 +465,65 @@ def cancelar_venta(db: Session, id_venta: int, id_usuario: int, motivo: str) -> 
         ahora = datetime.now()
         restituidos, a_merma = [], []
 
-        for mov, id_lote in _movimientos_de_venta(db, id_venta):
-            cantidad = _dec(mov.cantidad)
+        for id_insumo, id_lote, cantidad, costo_aplicado in _consumos_de_venta(db, id_venta):
             lote = db.get(LoteInsumo, id_lote, with_for_update=True)
-            vigente = lote is not None and (lote.caducidad is None or lote.caducidad >= hoy)
+            caducado = lote is None or _lote_caducado(lote, hoy)
 
-            if vigente:
+            if not caducado:
+                # Regresa exactamente lo que salió de este lote y lo reactiva
                 lote.cantidad_disponible = _dec(lote.cantidad_disponible) + cantidad
-                _actualizar_estado_lote(lote)
+                lote.estado = LOTE_DISPONIBLE
                 db.add(MovimientoInventario(
-                    id_insumo=mov.id_insumo,
+                    id_insumo=id_insumo,
+                    id_lote=id_lote,
+                    id_venta=id_venta,
                     id_usuario=id_usuario,
                     tipo_movimiento=TIPO_ENTRADA_CANCELACION,
                     cantidad=cantidad,
                     motivo=f"Cancelación venta #{id_venta} (Lote #{id_lote}) - {motivo}",
                     fecha_movimiento=ahora,
                 ))
-                restituidos.append({"id_lote": id_lote, "id_insumo": mov.id_insumo, "cantidad": float(cantidad)})
+                restituidos.append({"id_lote": id_lote, "id_insumo": id_insumo, "cantidad": float(cantidad)})
             else:
+                # El lote ya caducó: la cantidad devuelta se pierde como merma
+                if costo_aplicado is not None:
+                    costo_perdida = _dinero(costo_aplicado)
+                elif lote is not None:
+                    costo_perdida = _dinero(cantidad * _costo_base(lote, db.get(Insumo, id_insumo)))
+                else:
+                    costo_perdida = Decimal("0.00")
+                if lote is not None and _dec(lote.cantidad_disponible) > 0:
+                    lote.estado = LOTE_CADUCADO
                 db.add(Merma(
-                    id_insumo=mov.id_insumo,
+                    id_insumo=id_insumo,
                     id_lote=id_lote if lote is not None else None,
                     id_usuario=id_usuario,
+                    autorizado_por=id_usuario,
                     cantidad=cantidad,
-                    motivo=f"Cancelación venta #{id_venta}: lote caducado",
+                    costo_perdida=costo_perdida,
+                    motivo=MOTIVO_MERMA_CADUCIDAD,
+                    notas=f"Cancelación venta #{id_venta} ({motivo}): lote #{id_lote} caducado",
                     fecha=ahora,
                 ))
                 db.add(MovimientoInventario(
-                    id_insumo=mov.id_insumo,
+                    id_insumo=id_insumo,
+                    id_lote=id_lote if lote is not None else None,
+                    id_venta=id_venta,
                     id_usuario=id_usuario,
                     tipo_movimiento=TIPO_CANCELACION_A_MERMA,
                     cantidad=cantidad,
                     motivo=f"Cancelación venta #{id_venta} (Lote #{id_lote} caducado) - {motivo}",
                     fecha_movimiento=ahora,
                 ))
-                a_merma.append({"id_lote": id_lote, "id_insumo": mov.id_insumo, "cantidad": float(cantidad)})
+                a_merma.append({"id_lote": id_lote, "id_insumo": id_insumo, "cantidad": float(cantidad),
+                                "costo_perdida": float(costo_perdida)})
 
         venta.estado = ESTADO_CANCELADA
+        registrar_bitacora(
+            db, id_usuario, "VENTA_CANCELADA",
+            f"Venta #{id_venta} · ${_dec(venta.total):.2f} · Motivo: {motivo} · "
+            f"{len(restituidos)} lote(s) restituido(s), {len(a_merma)} a merma",
+        )
         db.commit()
 
         return {

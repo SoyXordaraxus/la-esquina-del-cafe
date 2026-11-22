@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import Usuario, Insumo, LoteInsumo, Venta, Merma, Bitacora
+from models import Usuario, Insumo, LoteInsumo, Venta, Merma
+from services.bitacora import registrar_bitacora
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 
@@ -13,10 +14,6 @@ router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 class LoginSchema(BaseModel):
     usuario: str
     contrasena: str
-
-
-def registrar_bitacora(db: Session, id_usuario: int, accion: str, detalle: str):
-    db.add(Bitacora(id_usuario=id_usuario, accion=accion, detalle=detalle))
 
 
 # ==========================================
