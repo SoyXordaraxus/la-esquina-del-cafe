@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de caducidades y lotes | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .peps-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .leyenda-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill-info {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: #fff;
+      border: 1px solid var(--borde, #e5ddd3);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot-rojo { width: 9px; height: 9px; border-radius: 50%; background: #c93b2b; display: inline-block; }
+    .dot-amarillo { width: 9px; height: 9px; border-radius: 50%; background: #d48b17; display: inline-block; }
+    .filtros-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    tr.fila-roja { background-color: #fdf2f0; }
+    tr.fila-amarilla { background-color: #fef9ec; }
+    .sub-venc { display: block; font-size: 0.8rem; margin-top: 2px; }
+    .sub-venc.rojo { color: #b42318; font-weight: 600; }
+    .sub-venc.amarillo { color: #b54708; font-weight: 600; }
+    .sub-venc.neutro { color: var(--texto-suave, #6f6257); }
+    @media (max-width: 800px) { .filtros-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Control de caducidades y lotes</h1>
+        <p class="subtitulo">Gestión de lotes y alertas de vencimiento bajo regla PEPS.</p>
+
+        <div class="card peps-banner">
+          <div>
+            <strong>PEPS · Primero en caducar, primero en salir</strong>
+            <div style="font-size:0.86rem; color:var(--texto-suave);">Lotes ordenados por fecha de caducidad ascendente.</div>
+          </div>
+          <div class="leyenda-pills">
+            <span class="pill-info"><span class="dot-rojo"></span> 3 días o menos · Prioridad alta</span>
+            <span class="pill-info"><span class="dot-amarillo"></span> 4 a 5 días · Próximos a vencer</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="filtros-grid">
+            <div class="campo">
+              <label for="filtro-buscar">Buscar insumo o lote</label>
+              <input type="text" id="filtro-buscar" placeholder="Nombre del insumo o número de lote">
+            </div>
+            <div class="campo">
+              <label for="filtro-estado">Estado</label>
+              <select id="filtro-estado">
+                <option value="todos">Todos los estados</option>
+                <option value="Caducado">Caducado</option>
+                <option value="Vigente">Vigente</option>
+                <option value="Agotado">Agotado</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="filtro-venc">Vencimiento</label>
+              <select id="filtro-venc">
+                <option value="todos">Todas las fechas</option>
+                <option value="alertas">Caducados y próximos (≤ 5 días)</option>
+                <option value="urgente">Urgente (≤ 3 días)</option>
+                <option value="precaucion">Precaución (4 a 5 días)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="resumen-conteo" style="font-size:0.9rem; margin-bottom:10px; color:var(--texto-suave);">Cargando lotes...</div>
+
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th>Lote</th>
+                  <th>Fecha de caducidad</th>
+                  <th>Cantidad restante</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-caducidades"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/caducidades.js"></script>
+</body>
+</html>

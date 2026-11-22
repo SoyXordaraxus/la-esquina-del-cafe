@@ -1,35 +1,13 @@
 /* =========================================================
    menu.js - Barra superior + menú lateral + modales globales
-   La Esquina del Café  |  Responsable: Francisco
-   NO modificar: todas las pantallas lo cargan igual, así que si el
-   menú cambia, se corrige aquí una sola vez para las 14 pantallas.
-
-   SESIÓN (modo desarrollo, SIN login.html)
-- Si no hay sesión en localStorage, se crea un usuario de prueba:
-       { nombre: "Andres Mosso", rol: "Administrador" }
-- En la barra superior hay un selector "DEV · Rol" para alternar
-     entre Administrador y Cajero sin necesitar login.
-- NUNCA se redirige a login.html.
-
-   CONTRATO CON EL LOGIN (Osvaldo), cuando exista:
-     localStorage.setItem("usuario", JSON.stringify({
-        nombre: "Ana López", rol: "Administrador"      // o "Cajero"
-     }));
-   y poner abajo:  PAGINA_LOGIN = "login.html"  y  MOSTRAR_SELECTOR_ROL = false
-
-   FUNCIONES GLOBALES PARA EL EQUIPO
-     abrirModal("id")  /  cerrarModal("id")
-     mostrarConfirmacion({ titulo, mensaje, onConfirmar })   <- Modal M1
-     ponerBadge("caducidades.html", 4)                       <- contador del menú
-     escaparHtml(texto)
+   La Esquina del Café
    ========================================================= */
+const MOSTRAR_SELECTOR_ROL = false;
+const PAGINA_LOGIN = "login.html";
 
-/* ---------- Configuración ---------- */
-const MOSTRAR_SELECTOR_ROL = true;   // selector DEV de rol (apagar al integrar el login)
-const PAGINA_LOGIN = null;           // ej. "login.html"; con null, "Cerrar sesión" solo reinicia al usuario de prueba
 const CLAVE_USUARIO = "usuario";
-const USUARIO_PRUEBA = { nombre: "Andres Mosso", rol: "Administrador" };
-const BADGES_INICIALES = { "caducidades.html": 4 };   // valor de ejemplo; Osvaldo lo sustituye con datos reales
+const USUARIO_PRUEBA = { id_usuario: 1, nombre: "Andres Mosso", rol: "Administrador" };
+const BADGES_INICIALES = { "caducidades.html": 4 };
 
 /* ---------- Iconos (SVG de línea, sin librerías) ---------- */
 const ICONOS = {
@@ -47,10 +25,7 @@ const ICONOS = {
   bitacora:    "M9 4h6v3H9zM7 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1M9 12h6M9 16h6",
   respaldos:   "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
   campana:     "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0",
-  tienda:      "M4 9l1-5h14l1 5M4 9v11h16V9M4 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 6 0 2.5 2.5 0 0 0 5 0",
-  ayuda:       "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01",
   grano:       "M12 3c4 2 6 6 6 9s-2 7-6 9c-4-2-6-6-6-9s2-7 6-9zM12 3c-2 4-2 10 0 18",
-  selector:    "M8 9l4-4 4 4M16 15l-4 4-4-4",
 };
 
 function svg(nombre, tam = 18) {
@@ -84,7 +59,6 @@ function guardarUsuario(usuario) {
   try { localStorage.setItem(CLAVE_USUARIO, JSON.stringify(usuario)); } catch (e) { /* almacenamiento no disponible */ }
 }
 
-// Nunca devuelve null: si no hay sesión válida, crea el usuario de prueba.
 function obtenerUsuario() {
   try {
     const g = JSON.parse(localStorage.getItem(CLAVE_USUARIO));
@@ -124,7 +98,6 @@ function cerrarModal(id) {
   if (!document.querySelector(".modal-fondo.abierto")) document.body.classList.remove("modal-abierto");
 }
 
-// Clic en el fondo oscuro o tecla Escape cierran el modal superior
 document.addEventListener("click", e => {
   if (e.target.classList && e.target.classList.contains("modal-fondo")) cerrarModal(e.target.id);
 });
@@ -134,14 +107,7 @@ document.addEventListener("keydown", e => {
   if (abiertos.length) cerrarModal(abiertos[abiertos.length - 1].id);
 });
 
-/* ---------- Modal M1_Confirmacion (reutilizable) ----------
-   mostrarConfirmacion({
-     titulo: "Cancelar comanda",
-     mensaje: "¿Está seguro de que desea cancelar la comanda actual?",
-     textoConfirmar: "Sí, confirmar",     // opcional
-     onConfirmar: () => { ... }           // solo se ejecuta si el usuario dice Sí
-   });
-   El modal se inserta solo: no hay que copiarlo en cada pantalla. */
+/* ---------- Modal M1_Confirmacion (reutilizable) ---------- */
 let _accionConfirmada = null;
 
 function insertarModalConfirmacion() {
@@ -187,22 +153,36 @@ function mostrarConfirmacion({ titulo = "Confirmar acción", mensaje = "¿Está 
 function cerrarSesion() {
   try { localStorage.removeItem(CLAVE_USUARIO); } catch (e) { /* nada */ }
   if (PAGINA_LOGIN) window.location.href = PAGINA_LOGIN;
-  else window.location.reload();       // sin login: vuelve al usuario de prueba
+  else window.location.reload();
 }
 
 function cambiarRolDev(nuevoRol) {
   const u = obtenerUsuario();
-  guardarUsuario({ nombre: u.nombre, rol: nuevoRol });
+  guardarUsuario({ ...u, rol: nuevoRol });
   window.location.reload();
 }
 
 /* ---------- Barra superior + menú lateral ---------- */
 function construirLayout() {
+  document.title = "La esquina del café";
+  if (!document.querySelector("link[rel='icon']")) {
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.type = "image/svg+xml";
+    link.href = "data:image/svg+xml," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="8" fill="#4a3222"/>
+        <path d="M16 7c4 2 6 6 6 9s-2 7-6 9c-4-2-6-6-6-9s2-7 6-9zM16 7c-2 4-2 10 0 18"
+              fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      </svg>`
+    );
+    document.head.appendChild(link);
+  }
+
   const usuario = obtenerUsuario();
   const paginaActual = (window.location.pathname.split("/").pop() || "inicio.html").toLowerCase();
   const permitidos = MENU_ITEMS.filter(i => i.roles.includes(usuario.rol));
 
-  // ---- Barra superior ----
   const selectorDev = MOSTRAR_SELECTOR_ROL ? `
       <label class="dev-rol" title="Solo para desarrollo: cambia de rol sin login">
         <span>DEV · Rol</span>
@@ -233,7 +213,6 @@ function construirLayout() {
   const selector = document.getElementById("dev-rol");
   if (selector) selector.addEventListener("change", e => cambiarRolDev(e.target.value));
 
-  // ---- Menú lateral ----
   const seccion = usuario.rol === "Administrador" ? "Administración" : "Operación";
   const itemActual = MENU_ITEMS.find(i => i.archivo === paginaActual) || MENU_ITEMS[0];
   document.getElementById("sidebar").innerHTML = `
@@ -249,27 +228,17 @@ function construirLayout() {
                  class="${i.archivo === paginaActual ? "activo" : ""}" ${i.archivo === paginaActual ? 'aria-current="page"' : ""}>
             ${svg(i.icono)}<span class="sb-txt">${i.texto}</span></a></li>`).join("")}
       </ul>
-    </nav>
-    <div class="sucursal">
-      ${svg("tienda", 18)}
-      <div class="sb-txt"><strong>Sucursal Centro</strong><small>Turno de mañana</small></div>
-      <span class="sb-txt selector-icono">${svg("selector", 16)}</span>
-    </div>
-    <div class="sidebar-pie">
-      <a href="#">${svg("ayuda", 16)}<span class="sb-txt">Centro de ayuda</span></a>
-    </div>`;
+    </nav>`;
 
-  // Insignias de ejemplo (solo se muestran las de opciones visibles para el rol)
   Object.entries(BADGES_INICIALES).forEach(([archivo, n]) => ponerBadge(archivo, n));
 
-  // Aviso (no bloqueante) si el rol actual no debería ver esta pantalla
   const esDelMenu = MENU_ITEMS.some(i => i.archivo === paginaActual);
   if (esDelMenu && !permitidos.some(i => i.archivo === paginaActual)) {
     const zona = document.querySelector(".pantalla");
     if (zona) {
       const aviso = document.createElement("div");
       aviso.className = "alerta-error";
-      aviso.textContent = `El rol ${usuario.rol} no tiene acceso a esta pantalla. (Aviso de desarrollo: la pantalla no se bloquea.)`;
+      aviso.textContent = `El rol ${usuario.rol} no tiene acceso a esta pantalla.`;
       zona.prepend(aviso);
     }
   }
@@ -277,7 +246,6 @@ function construirLayout() {
   insertarModalConfirmacion();
 }
 
-// Insignia con contador junto a una opción (ej. ponerBadge("caducidades.html", 4))
 function ponerBadge(archivo, numero) {
   const enlace = document.querySelector(`.sidebar-menu a[data-archivo="${archivo}"]`);
   if (!enlace) return;

@@ -1,57 +1,108 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import Insumo, LoteInsumo, Venta, Merma
+from models import Usuario, Insumo, LoteInsumo, Venta, Merma, Bitacora
 
-router = APIRouter(prefix="/api", tags=["Tableros"])
+router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
+
+
+class LoginSchema(BaseModel):
+    usuario: str
+    contrasena: str
+
+
+def registrar_bitacora(db: Session, id_usuario: int, accion: str, detalle: str):
+    db.add(Bitacora(id_usuario=id_usuario, accion=accion, detalle=detalle))
 
 
 # ==========================================
-# 1. PANEL PRINCIPAL (02_Panel) - DESDE MYSQL
+# 0. INICIO DE SESIÓN (RF 1, RF 1.1, RF 1.2, RF 13)
+# ==========================================
+@router.post("/auth/login")
+def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
+    user_input = (datos.usuario or "").strip()
+    pass_input = (datos.contrasena or "").strip()
+
+    if not user_input or len(pass_input) < 8:
+        raise HTTPException(status_code=400, detail="Usuario requerido y contraseña de al menos 8 caracteres.")
+
+    usuario = (
+        db.query(Usuario)
+        .filter(
+            (func.lower(Usuario.nombre_usuario) == user_input.lower()) |
+            (func.lower(Usuario.correo) == user_input.lower())
+        )
+        .first()
+    )
+
+    if not usuario or usuario.contrasena != pass_input:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+
+    if (usuario.estado or "").lower() != "activo":
+        raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
+
+    # Normalizar rol para el contrato del frontend ("Administrador" | "Cajero")
+    rol_norm = "Administrador" if "admin" in usuario.rol.lower() else "Cajero"
+
+    registrar_bitacora(db, usuario.id_usuario, "SESION_INICIADA", f"Inicio de sesión correcto · Rol: {rol_norm}")
+    db.commit()
+
+    return {
+        "id_usuario": usuario.id_usuario,
+        "nombre": usuario.nombre_usuario,
+        "correo": usuario.correo,
+        "rol": rol_norm,
+    }
+
+
+# ==========================================
+# 1. PANEL PRINCIPAL (02_Panel)
 # ==========================================
 @router.get("/dashboard/resumen")
 def obtener_resumen_dia(db: Session = Depends(get_db)):
     hoy = date.today()
-    limite_caducidad = hoy + timedelta(days=7)
+    limite_caducidad = hoy + timedelta(days=5)  # RF 6.1: alertas hasta 5 días
 
-    # Ventas del día (o acumuladas si aún no hay ventas con fecha de hoy)
-    ventas_hoy = db.query(Venta).filter(func.date(Venta.fecha_emision_ticket) == hoy).all()
+    ventas_hoy = db.query(Venta).filter(
+        func.date(Venta.fecha_emision_ticket) == hoy,
+        func.lower(Venta.estado) == "completada"
+    ).all()
     if not ventas_hoy:
-        ventas_hoy = db.query(Venta).all()
+        ventas_hoy = db.query(Venta).filter(func.lower(Venta.estado) == "completada").all()
 
     ventas_dia = sum(float(v.total) for v in ventas_hoy)
     tickets_dia = len(ventas_hoy)
 
-    # Mermas registradas
     mermas = db.query(Merma).all()
     registros_mermas = len(mermas)
-    mermas_mes = 0.0
-    for m in mermas:
-        lote = db.query(LoteInsumo).filter(LoteInsumo.id_lote == m.id_lote).first()
-        costo = float(lote.costo_unitario) if lote else 25.0
-        mermas_mes += float(m.cantidad) * costo
+    mermas_mes = sum(float(m.costo_perdida) for m in mermas)
 
-    # Insumos y lotes activos
     insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
     insumos_bajo_minimo = 0
     alertas = []
 
     for ins in insumos:
-        lotes_insumo = (
+        # RF 10: excluir estrictamente lotes caducados o agotados
+        lotes_vigentes = (
             db.query(LoteInsumo)
-            .filter(LoteInsumo.id_insumo == ins.id_insumo, LoteInsumo.cantidad_disponible > 0)
+            .filter(
+                LoteInsumo.id_insumo == ins.id_insumo,
+                LoteInsumo.cantidad_disponible > 0,
+                (LoteInsumo.caducidad == None) | (LoteInsumo.caducidad >= hoy)
+            )
             .order_by(LoteInsumo.caducidad.asc())
             .all()
         )
-        stock_total = sum(float(l.cantidad_disponible) for l in lotes_insumo)
+        stock_total = sum(float(l.cantidad_disponible) for l in lotes_vigentes)
         minimo = float(ins.minimo_reposicion)
 
         if stock_total <= minimo:
             insumos_bajo_minimo += 1
-            lote_ref = lotes_insumo[0].numero_factura if lotes_insumo and lotes_insumo[0].numero_factura else f"INS-{ins.id_insumo:03d}"
+            lote_ref = lotes_vigentes[0].numero_factura if lotes_vigentes and lotes_vigentes[0].numero_factura else f"INS-{ins.id_insumo:03d}"
             alertas.append({
                 "insumo": ins.nombre,
                 "lote": lote_ref,
@@ -63,7 +114,6 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
                 "accion": "Reabastecer"
             })
 
-    # Lotes caducados o próximos a caducar (<= 7 días)
     lotes_proximos = (
         db.query(LoteInsumo)
         .filter(
@@ -96,12 +146,23 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
                 "estado_tipo": "rojo",
                 "accion": "Registrar merma"
             })
-        else:
-            texto_venc = "Vence hoy" if dias == 0 else f"Vence en {dias} días"
+        elif dias <= 3:
+            texto_venc = "Vence hoy" if dias == 0 else ("Vence mañana" if dias == 1 else f"Vence en {dias} días")
             alertas.append({
                 "insumo": ins.nombre,
                 "lote": codigo_lote,
                 "vencimiento": texto_venc,
+                "vencimiento_tipo": "rojo",
+                "cantidad_restante": f"{float(lote.cantidad_disponible):g} {ins.unidad_medida}",
+                "estado": "Urgente",
+                "estado_tipo": "rojo",
+                "accion": "Ver lote"
+            })
+        else:
+            alertas.append({
+                "insumo": ins.nombre,
+                "lote": codigo_lote,
+                "vencimiento": f"Vence en {dias} días",
                 "vencimiento_tipo": "amarillo",
                 "cantidad_restante": f"{float(lote.cantidad_disponible):g} {ins.unidad_medida}",
                 "estado": "Por vencer",
@@ -124,33 +185,21 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
 
 
 # ==========================================
-# 2. SEMÁFORO (06_Inventario) - DESDE MYSQL
+# 2. SEMÁFORO DE INVENTARIO (RF 10, RF 10.1)
 # ==========================================
 def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float) -> dict:
     porcentaje = round((existencia_actual / existencia_minima) * 100) if existencia_minima > 0 else 100
-
     if porcentaje > 120:
-        return {
-            "color": "verde",
-            "etiqueta": "Existencias suficientes",
-            "porcentaje": porcentaje
-        }
+        return {"color": "verde", "etiqueta": "Existencias suficientes", "porcentaje": porcentaje}
     elif porcentaje > 100:
-        return {
-            "color": "amarillo",
-            "etiqueta": "Existencias bajas",
-            "porcentaje": porcentaje
-        }
+        return {"color": "amarillo", "etiqueta": "Existencias bajas", "porcentaje": porcentaje}
     else:
-        return {
-            "color": "rojo",
-            "etiqueta": "Existencias críticas",
-            "porcentaje": porcentaje
-        }
+        return {"color": "rojo", "etiqueta": "Existencias críticas", "porcentaje": porcentaje}
 
 
 @router.get("/inventario/semaforo")
 def obtener_inventario_semaforo(db: Session = Depends(get_db)):
+    hoy = date.today()
     insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
 
     resultado = []
@@ -159,7 +208,11 @@ def obtener_inventario_semaforo(db: Session = Depends(get_db)):
     for ins in insumos:
         lotes = (
             db.query(LoteInsumo)
-            .filter(LoteInsumo.id_insumo == ins.id_insumo, LoteInsumo.cantidad_disponible > 0)
+            .filter(
+                LoteInsumo.id_insumo == ins.id_insumo,
+                LoteInsumo.cantidad_disponible > 0,
+                (LoteInsumo.caducidad == None) | (LoteInsumo.caducidad >= hoy)
+            )
             .order_by(LoteInsumo.caducidad.asc())
             .all()
         )
@@ -182,8 +235,4 @@ def obtener_inventario_semaforo(db: Session = Depends(get_db)):
             "semaforo": estado
         })
 
-    return {
-        "resumen": resumen,
-        "total": len(resultado),
-        "productos": resultado
-    }
+    return {"resumen": resumen, "total": len(resultado), "productos": resultado}

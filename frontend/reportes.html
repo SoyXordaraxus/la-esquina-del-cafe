@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .tabs-reporte {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--borde, #e5ddd3);
+      background: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+    }
+    .tab-btn.activo {
+      background: var(--cafe, #4a3222);
+      color: #fff;
+      border-color: var(--cafe, #4a3222);
+    }
+    .fechas-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .barra-exportar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--borde, #e5ddd3);
+    }
+    @media (max-width: 800px) { .tabs-reporte, .fechas-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Reportes</h1>
+        <p class="subtitulo">Convierte la operación diaria en información útil y exportable para tu cafetería.</p>
+
+        <div class="card" style="margin-bottom:18px;">
+          <label style="display:block; font-weight:600; margin-bottom:8px;">Selecciona el tipo de reporte</label>
+          <div class="tabs-reporte">
+            <button type="button" class="tab-btn activo" data-tipo="ventas">Ventas netas</button>
+            <button type="button" class="tab-btn" data-tipo="consumo">Consumo de insumos</button>
+            <button type="button" class="tab-btn" data-tipo="mermas">Mermas</button>
+          </div>
+
+          <div class="fechas-grid">
+            <div class="campo">
+              <label for="rep-inicio">Fecha inicial</label>
+              <input type="date" id="rep-inicio">
+            </div>
+            <div class="campo">
+              <label for="rep-fin">Fecha final</label>
+              <input type="date" id="rep-fin">
+            </div>
+            <button type="button" class="btn btn-primario" id="btn-generar-rep">Generar reporte</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <strong id="rep-titulo-previa" style="font-size:1.1rem;">Vista previa · Ventas netas</strong>
+              <div id="rep-subtitulo-previa" style="font-size:0.86rem; color:var(--texto-suave);">—</div>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table>
+              <thead id="rep-thead"></thead>
+              <tbody id="rep-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="barra-exportar">
+            <div>
+              <strong>Tu reporte está listo para descargar</strong>
+              <div style="font-size:0.84rem; color:var(--texto-suave);">Se exportará el periodo y el tipo de reporte seleccionados.</div>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button type="button" class="btn btn-secundario" id="btn-exp-csv">Exportar CSV</button>
+              <button type="button" class="btn btn-primario" id="btn-exp-pdf">Exportar PDF</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/reportes.js"></script>
+</body>
+</html>

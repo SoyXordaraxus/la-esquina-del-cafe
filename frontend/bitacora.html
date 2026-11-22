@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bitácora del sistema | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .banner-protegido {
+      background: #faf6f1;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .filtros-bit {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 850px) { .filtros-bit { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Bitácora del sistema</h1>
+        <p class="subtitulo">Trazabilidad inmutable de los movimientos y acciones realizadas por tu equipo.</p>
+
+        <div class="banner-protegido">
+          <strong>Historial protegido · Solo lectura</strong>
+          <div style="font-size:0.86rem; color:var(--texto-suave);">Los registros se generan automáticamente y no se pueden editar ni eliminar.</div>
+        </div>
+
+        <div class="card">
+          <div class="filtros-bit">
+            <div class="campo">
+              <label for="bit-usuario">Usuario responsable</label>
+              <select id="bit-usuario">
+                <option value="">Todos los usuarios</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="bit-inicio">Fecha inicial</label>
+              <input type="date" id="bit-inicio">
+            </div>
+            <div class="campo">
+              <label for="bit-fin">Fecha final</label>
+              <input type="date" id="bit-fin">
+            </div>
+            <button type="button" class="btn btn-primario" id="btn-filtrar-bit">Buscar registros</button>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Hora exacta</th>
+                  <th>Usuario responsable</th>
+                  <th>Acción técnica ejecutada</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-bitacora"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/bitacora.js"></script>
+</body>
+</html>

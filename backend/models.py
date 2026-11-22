@@ -7,7 +7,7 @@ class Usuario(Base):
     id_usuario = Column(Integer, primary_key=True, autoincrement=True)
     nombre_usuario = Column(String(50), nullable=False, unique=True)
     correo = Column(String(50), nullable=False, unique=True)
-    contrasena = Column(String(50), nullable=False)
+    contrasena = Column(String(100), nullable=False)
     rol = Column(String(30), nullable=False)
     estado = Column(String(20), default="Activo")
     fecha_registro = Column(TIMESTAMP, server_default=func.now())
@@ -27,6 +27,8 @@ class Insumo(Base):
     nombre = Column(String(100), nullable=False)
     categoria = Column(String(50), nullable=False)
     unidad_medida = Column(String(10), nullable=False)
+    unidad_compra = Column(String(10), nullable=False, default="pza")
+    factor_conversion = Column(DECIMAL(10, 4), nullable=False, default=1.0000)
     es_perecedero = Column(Boolean, nullable=False, default=True)
     minimo_reposicion = Column(DECIMAL(10, 2), nullable=False)
     estado = Column(String(20), default="Activo")
@@ -42,6 +44,7 @@ class LoteInsumo(Base):
     fecha_entrada = Column(TIMESTAMP, server_default=func.now())
     caducidad = Column(Date, nullable=True)
     numero_factura = Column(String(50), nullable=True)
+    estado = Column(String(20), nullable=False, default="Disponible")
 
 class Producto(Base):
     __tablename__ = "producto"
@@ -78,10 +81,20 @@ class DetalleVenta(Base):
     precio_unitario = Column(DECIMAL(10, 2), nullable=False)
     subtotal = Column(DECIMAL(10, 2), nullable=False)
 
+class DetalleConsumoPeps(Base):
+    __tablename__ = "detalle_consumo_peps"
+    id_consumo = Column(Integer, primary_key=True, autoincrement=True)
+    id_detalle_venta = Column(Integer, ForeignKey("detalle_venta.id_detalle", ondelete="CASCADE"), nullable=False)
+    id_lote = Column(Integer, ForeignKey("lote_insumo.id_lote"), nullable=False)
+    cantidad_descontada = Column(DECIMAL(10, 4), nullable=False)
+    costo_aplicado = Column(DECIMAL(10, 2), nullable=False)
+
 class MovimientoInventario(Base):
     __tablename__ = "movimiento_inventario"
     id_movimiento = Column(Integer, primary_key=True, autoincrement=True)
     id_insumo = Column(Integer, ForeignKey("insumo.id_insumo"), nullable=False)
+    id_lote = Column(Integer, ForeignKey("lote_insumo.id_lote"), nullable=True)
+    id_venta = Column(Integer, ForeignKey("venta.id_venta"), nullable=True)
     id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=False)
     tipo_movimiento = Column(String(30), nullable=False)
     cantidad = Column(DECIMAL(10, 2), nullable=False)
@@ -94,8 +107,11 @@ class Merma(Base):
     id_insumo = Column(Integer, ForeignKey("insumo.id_insumo"), nullable=False)
     id_lote = Column(Integer, ForeignKey("lote_insumo.id_lote"), nullable=True)
     id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=False)
+    autorizado_por = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=True)
     cantidad = Column(DECIMAL(10, 2), nullable=False)
+    costo_perdida = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     motivo = Column(String(255), nullable=False)
+    notas = Column(String(255), nullable=True)
     fecha = Column(TIMESTAMP, server_default=func.now())
 
 class CorteCaja(Base):
@@ -117,3 +133,11 @@ class AlertaInventario(Base):
     mensaje = Column(String(255), nullable=False)
     leida = Column(Boolean, default=False)
     fecha_alerta = Column(TIMESTAMP, server_default=func.now())
+
+class Bitacora(Base):
+    __tablename__ = "bitacora"
+    id_bitacora = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=False)
+    accion = Column(String(60), nullable=False)
+    detalle = Column(String(255), nullable=False)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now())

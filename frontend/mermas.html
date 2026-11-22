@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de mermas | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .aviso-limite {
+      background: #fef6e7;
+      border: 1px solid #f2c97d;
+      color: #7a4b00;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-weight: 500;
+    }
+    .grid-merma {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1.2fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .info-lote-box {
+      background: #faf7f3;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    @media (max-width: 850px) { .grid-merma { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Registro de mermas</h1>
+        <p class="subtitulo">Baja de insumos por caducidad, derrame, error de preparación o daño en empaque.</p>
+
+        <div class="aviso-limite" id="banner-limite">
+          Atención: Mermas mayores a <strong>$100.00 MXN</strong> registradas por Cajero requieren contraseña de autorización del Administrador.
+        </div>
+
+        <div id="msg-merma" style="display:none; margin-bottom:14px;"></div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <form id="form-merma">
+            <div class="grid-merma">
+              <div class="campo">
+                <label for="select-lote">Insumo / Lote</label>
+                <select id="select-lote" required>
+                  <option value="">Cargando lotes con saldo...</option>
+                </select>
+              </div>
+
+              <div class="campo">
+                <label for="input-cantidad">Cantidad a dar de baja</label>
+                <input type="number" id="input-cantidad" step="0.01" min="0.01" placeholder="0.00" required>
+              </div>
+
+              <div class="campo">
+                <label for="select-motivo">Motivo</label>
+                <select id="select-motivo" required>
+                  <option value="Caducidad">Caducidad</option>
+                  <option value="Derrame">Derrame</option>
+                  <option value="Error de preparación">Error de preparación</option>
+                  <option value="Daño en empaque">Daño en empaque</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="info-lote-box" id="detalle-lote-box" style="display:none;">
+              <span id="txt-saldo-lote">Saldo disponible: —</span>
+              <span id="txt-caducidad-lote">Caducidad: —</span>
+              <span id="txt-costo-admin" style="display:none; font-weight:600;">Costo estimado: $0.00</span>
+            </div>
+
+            <div class="campo" style="margin-bottom:16px;">
+              <label for="input-notas">Notas adicionales (opcional)</label>
+              <input type="text" id="input-notas" maxlength="200" placeholder="Observaciones breves del incidente">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="submit" class="btn btn-primario" id="btn-guardar-merma">Registrar merma</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2 style="margin-top:0; font-size:1.15rem;">Historial reciente de mermas</h2>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha / Hora</th>
+                  <th>Insumo</th>
+                  <th>Lote</th>
+                  <th>Cantidad</th>
+                  <th>Motivo</th>
+                  <th>Responsable</th>
+                  <th id="col-costo-header">Costo est.</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-mermas"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal RF 11.1: Autorización de Administrador para mermas > $100 -->
+  <div class="modal-fondo" id="modal-auth-admin" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <h2>Autorización de Administrador</h2>
+      <p>Esta merma excede el límite permitido de <strong>$100.00 MXN</strong> para el rol Cajero. Ingresa la contraseña de un Administrador para autorizar la baja.</p>
+      <div id="error-modal-admin" class="alerta-error" style="display:none; margin-bottom:10px;"></div>
+      <div class="campo" style="margin-bottom:16px;">
+        <label for="pass-admin-modal">Contraseña de Administrador</label>
+        <input type="password" id="pass-admin-modal" placeholder="••••••••">
+      </div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" onclick="cerrarModal('modal-auth-admin')">Cancelar</button>
+        <button type="button" class="btn btn-primario" id="btn-confirmar-admin">Autorizar y registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/mermas.js"></script>
+</body>
+</html>

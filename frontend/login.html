@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La esquina del café</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234a3222'/%3E%3Cpath d='M16 7c4 2 6 6 6 9s-2 7-6 9c-4-2-6-6-6-9s2-7 6-9zM16 7c-2 4-2 10 0 18' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    body.login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--fondo, #f8f5f0);
+      padding: 20px;
+      margin: 0;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 10px 30px rgba(74, 50, 34, 0.06);
+      text-align: center;
+    }
+    .login-icono {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
+      border-radius: 14px;
+      background: #f4eee6;
+      color: var(--cafe, #4a3222);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card h1 {
+      margin: 0 0 6px;
+      font-size: 1.55rem;
+      color: #2b1d14;
+    }
+    .login-card p.sub {
+      margin: 0 0 22px;
+      color: var(--texto-suave, #6f6257);
+      font-size: 0.94rem;
+    }
+    .login-form {
+      text-align: left;
+    }
+    .login-form .campo {
+      margin-bottom: 16px;
+    }
+    .login-form small {
+      display: block;
+      margin-top: 5px;
+      font-size: 0.8rem;
+      color: var(--texto-suave, #6f6257);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 13px;
+      font-size: 1rem;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="login-icono" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+        <line x1="6" y1="1" x2="6" y2="4"/>
+        <line x1="10" y1="1" x2="10" y2="4"/>
+        <line x1="14" y1="1" x2="14" y2="4"/>
+      </svg>
+    </div>
+
+    <h1>La esquina del café</h1>
+    <p class="sub">Ingresa tus datos para continuar.</p>
+
+    <div id="login-error" class="alerta-error" style="display:none; margin-bottom:16px; text-align:left;"></div>
+
+    <form id="form-login" class="login-form" autocomplete="off">
+      <div class="campo">
+        <label for="login-usuario">Usuario o correo</label>
+        <input type="text" id="login-usuario" placeholder="Ingresa tu usuario" required autofocus>
+      </div>
+
+      <div class="campo">
+        <label for="login-password">Contraseña</label>
+        <input type="password" id="login-password" placeholder="••••••••" minlength="8" required>
+        <small>Introduce una contraseña (mín. 8 caracteres).</small>
+      </div>
+
+      <button type="submit" class="btn btn-primario btn-login" id="btn-login">Iniciar sesión</button>
+    </form>
+  </main>
+
+  <script src="js/login.js"></script>
+</body>
+</html>

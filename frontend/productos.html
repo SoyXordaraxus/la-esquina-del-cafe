@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Productos y recetas | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .header-acciones {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpis-prod {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi-mini {
+      background: #fff;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+    .kpi-mini strong { font-size: 1.45rem; display: block; }
+    .kpi-mini span { font-size: 0.85rem; color: var(--texto-suave, #6f6257); }
+    .filtros-prod {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .editor-receta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .panel-interno {
+      background: #faf7f3;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .renglon-receta {
+      display: grid;
+      grid-template-columns: 2fr 1fr 54px auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .unidad-tag {
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: var(--texto-suave);
+      text-align: center;
+    }
+    .aviso-futuro {
+      background: #fef6e7;
+      border: 1px solid #f2c97d;
+      color: #7a4b00;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.86rem;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 850px) {
+      .kpis-prod, .filtros-prod, .editor-receta-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <div class="header-acciones">
+          <div>
+            <h1>Productos y recetas</h1>
+            <p class="subtitulo">Gestiona tu oferta, sus precios y los insumos de cada receta (explosión de materiales).</p>
+          </div>
+          <button type="button" class="btn btn-primario" id="btn-nuevo-producto">+ Nuevo producto</button>
+        </div>
+
+        <div id="msg-productos" style="display:none; margin-bottom:14px;"></div>
+
+        <div class="kpis-prod">
+          <div class="kpi-mini"><strong id="kpi-prod-total">0</strong><span>Productos registrados</span></div>
+          <div class="kpi-mini"><strong id="kpi-prod-activos">0</strong><span>Productos activos</span></div>
+          <div class="kpi-mini"><strong id="kpi-prod-cats">0</strong><span>Categorías de venta</span></div>
+        </div>
+
+        <div class="card">
+          <div class="filtros-prod">
+            <div class="campo">
+              <label for="buscar-prod">Buscar producto</label>
+              <input type="text" id="buscar-prod" placeholder="Buscar producto por nombre...">
+            </div>
+            <div class="campo">
+              <label for="filtro-cat-prod">Categoría</label>
+              <select id="filtro-cat-prod">
+                <option value="todas">Todas las categorías</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="filtro-est-prod">Estado</label>
+              <select id="filtro-est-prod">
+                <option value="todos">Todos los estados</option>
+                <option value="activo">Activos</option>
+                <option value="inactivo">Inactivos</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Categoría</th>
+                  <th>Precio</th>
+                  <th>Estado</th>
+                  <th>Receta</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-productos"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal Crear / Editar Producto y Receta -->
+  <div class="modal-fondo" id="modal-producto" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" style="max-width:860px; width:95%;">
+      <h2 id="titulo-modal-prod">Editar producto</h2>
+      <p style="font-size:0.88rem; color:var(--texto-suave); margin-top:0;">
+        Actualiza la información de venta y los ingredientes exactos en unidad base por cada unidad vendida.
+      </p>
+
+      <div class="aviso-futuro">
+        <strong>Los cambios aplican solo a ventas futuras:</strong> las ventas ya registradas conservarán el precio y la receta que tenían al momento de realizarse.
+      </div>
+
+      <div id="error-modal-prod" class="alerta-error" style="display:none; margin-bottom:12px;"></div>
+
+      <form id="form-producto">
+        <input type="hidden" id="prod-id">
+
+        <div class="editor-receta-grid">
+          <!-- Columna izquierda: Datos del producto -->
+          <div class="panel-interno">
+            <strong style="display:block; margin-bottom:12px;">Datos del producto</strong>
+
+            <div class="campo" style="margin-bottom:12px;">
+              <label for="prod-nombre">Nombre</label>
+              <input type="text" id="prod-nombre" placeholder="Ej. Capuchino" required>
+            </div>
+
+            <div class="campo" style="margin-bottom:12px;">
+              <label for="prod-categoria">Categoría</label>
+              <select id="prod-categoria" required>
+                <option value="Bebidas calientes">Bebidas calientes</option>
+                <option value="Bebidas frías">Bebidas frías</option>
+                <option value="Panadería">Panadería</option>
+                <option value="Repostería">Repostería</option>
+                <option value="Alimentos">Alimentos</option>
+              </select>
+            </div>
+
+            <div class="campo" style="margin-bottom:12px;">
+              <label for="prod-precio">Precio de venta (MXN)</label>
+              <input type="number" id="prod-precio" step="0.50" min="1" placeholder="45.00" required>
+            </div>
+
+            <div class="campo">
+              <label for="prod-estado">Estado</label>
+              <select id="prod-estado">
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Columna derecha: Receta del producto -->
+          <div class="panel-interno">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <strong>Receta del producto</strong>
+              <span class="badge-verde" style="font-size:0.78rem;">Rinde: 1 pza</span>
+            </div>
+
+            <div id="lista-renglones-receta"></div>
+
+            <button type="button" class="btn btn-secundario" id="btn-agregar-renglon" style="margin-top:8px;">
+              + Agregar renglón
+            </button>
+
+            <p style="font-size:0.82rem; color:var(--texto-suave); margin-top:12px; margin-bottom:0;">
+              Usa la unidad base de cada insumo: gramos (g), mililitros (ml) o piezas (pza). Se permiten decimales.
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-acciones" style="margin-top:18px;">
+          <button type="button" class="btn btn-secundario" onclick="cerrarModal('modal-producto')">Cancelar</button>
+          <button type="submit" class="btn btn-primario">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/productos.js"></script>
+</body>
+</html>

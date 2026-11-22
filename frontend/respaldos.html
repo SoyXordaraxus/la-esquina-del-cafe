@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Respaldos | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .estado-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .estado-box {
+      background: #fff;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    @media (max-width: 750px) { .estado-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <h1>Estado del servidor y respaldos</h1>
+        <p class="subtitulo">Copias de seguridad locales de la base de datos (histórico de últimos 30 días).</p>
+
+        <div id="msg-respaldo" style="display:none; margin-bottom:14px;"></div>
+
+        <div class="estado-grid">
+          <div class="estado-box">
+            <span style="font-size:0.84rem; color:var(--texto-suave);">Estado del servidor local</span>
+            <div style="margin-top:6px;"><span class="badge-verde" id="lbl-estado-srv">ESTABLE · Operación local</span></div>
+          </div>
+          <div class="estado-box">
+            <span style="font-size:0.84rem; color:var(--texto-suave);">Último respaldo generado</span>
+            <div style="margin-top:6px;"><strong id="lbl-ultimo-bkp">—</strong></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+          <div>
+            <strong>Generar copia de seguridad ahora</strong>
+            <div style="font-size:0.85rem; color:var(--texto-suave);">Exporta estructura y registros completos de las 14 tablas en formato .SQL.</div>
+          </div>
+          <button type="button" class="btn btn-primario" id="btn-respaldar-ahora">Respaldar base de datos ahora</button>
+        </div>
+
+        <div class="card">
+          <h2 style="margin-top:0; font-size:1.12rem;">Historial de respaldos (últimos 30 días)</h2>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha / Hora</th>
+                  <th>Tipo de respaldo</th>
+                  <th>Estado</th>
+                  <th>Ubicación / Folio</th>
+                  <th>Tamaño</th>
+                  <th>Descarga</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-respaldos"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/respaldos.js"></script>
+</body>
+</html>

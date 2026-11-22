@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo de insumos | La Esquina del Café</title>
+  <link rel="stylesheet" href="css/estilos.css">
+  <style>
+    .header-acciones {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpis-insumos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi-mini {
+      background: #fff;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+    .kpi-mini strong { font-size: 1.45rem; display: block; }
+    .kpi-mini span { font-size: 0.85rem; color: var(--texto-suave, #6f6257); }
+    .filtros-insumos {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .caja-conversion {
+      background: #faf6f1;
+      border: 1px solid var(--borde, #e5ddd3);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 800px) {
+      .kpis-insumos, .filtros-insumos, .form-grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="contenido">
+      <section class="pantalla">
+        <div class="header-acciones">
+          <div>
+            <h1>Catálogo de insumos</h1>
+            <p class="subtitulo">Administra las materias primas, sus unidades de compra y umbrales mínimos.</p>
+          </div>
+          <button type="button" class="btn btn-primario" id="btn-nuevo-insumo">+ Nuevo insumo</button>
+        </div>
+
+        <div id="msg-insumos" style="display:none; margin-bottom:14px;"></div>
+
+        <div class="kpis-insumos">
+          <div class="kpi-mini"><strong id="kpi-total">0</strong><span>Insumos registrados</span></div>
+          <div class="kpi-mini"><strong id="kpi-perecederos">0</strong><span>Insumos perecederos</span></div>
+          <div class="kpi-mini"><strong id="kpi-no-perecederos">0</strong><span>No perecederos / empaques</span></div>
+        </div>
+
+        <div class="card">
+          <div class="filtros-insumos">
+            <div class="campo">
+              <label for="buscar-insumo">Buscar insumo</label>
+              <input type="text" id="buscar-insumo" placeholder="Buscar insumo por nombre...">
+            </div>
+            <div class="campo">
+              <label for="filtro-cat-insumo">Categoría</label>
+              <select id="filtro-cat-insumo">
+                <option value="todas">Todas las categorías</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="filtro-est-insumo">Estado</label>
+              <select id="filtro-est-insumo">
+                <option value="Activo">Solo activos</option>
+                <option value="todos">Todos</option>
+                <option value="Inactivo">Inactivos</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Categoría</th>
+                  <th>Perecedero</th>
+                  <th>Unidad base</th>
+                  <th>Compra / Conversión</th>
+                  <th>Umbral mínimo</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-insumos"></tbody>
+            </table>
+          </div>
+          <p style="font-size:0.83rem; color:var(--texto-suave); margin-top:12px; margin-bottom:0;">
+            Los umbrales mínimos se expresan siempre en la unidad base del insumo (g, ml o pza).
+          </p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal M4: Crear / Editar Insumo -->
+  <div class="modal-fondo" id="modal-insumo" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" style="max-width:560px;">
+      <h2 id="titulo-modal-insumo">Nuevo insumo</h2>
+      <p style="font-size:0.88rem; color:var(--texto-suave); margin-top:0;">
+        Define cómo se compra y se utiliza este insumo en las recetas. Todos los campos son obligatorios.
+      </p>
+
+      <div id="error-modal-insumo" class="alerta-error" style="display:none; margin-bottom:12px;"></div>
+
+      <form id="form-insumo">
+        <input type="hidden" id="insumo-id">
+
+        <div class="form-grid-2">
+          <div class="campo">
+            <label for="insumo-nombre">Nombre</label>
+            <input type="text" id="insumo-nombre" placeholder="Ej. Café en grano" required>
+          </div>
+          <div class="campo">
+            <label for="insumo-categoria">Categoría</label>
+            <select id="insumo-categoria" required>
+              <option value="Café y bebidas">Café y bebidas</option>
+              <option value="Lácteos">Lácteos</option>
+              <option value="Endulzantes y jarabes">Endulzantes y jarabes</option>
+              <option value="Panadería y repostería">Panadería y repostería</option>
+              <option value="Harinas y cereales">Harinas y cereales</option>
+              <option value="Desechables y empaques">Desechables y empaques</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="campo">
+            <label for="insumo-perecedero">Perecedero</label>
+            <select id="insumo-perecedero">
+              <option value="true">Sí (requiere fecha de caducidad)</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="insumo-minimo">Umbral mínimo (unidad base)</label>
+            <input type="number" id="insumo-minimo" step="0.01" min="0" placeholder="1000" required>
+          </div>
+        </div>
+
+        <hr style="border:none; border-top:1px solid var(--borde, #e5ddd3); margin:14px 0;">
+        <strong style="display:block; margin-bottom:8px;">Unidades y conversión</strong>
+
+        <div class="form-grid-2">
+          <div class="campo">
+            <label for="insumo-u-base">Unidad base (recetas)</label>
+            <select id="insumo-u-base">
+              <option value="g">g (Gramos)</option>
+              <option value="ml">ml (Mililitros)</option>
+              <option value="pza">pza (Piezas)</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="insumo-u-compra">Unidad de compra</label>
+            <select id="insumo-u-compra">
+              <option value="kg">kg (Kilogramos)</option>
+              <option value="L">L (Litros)</option>
+              <option value="cja">cja (Cajas)</option>
+              <option value="paq">paq (Paquetes)</option>
+              <option value="pza">pza (Piezas)</option>
+              <option value="g">g (Gramos)</option>
+              <option value="ml">ml (Mililitros)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="campo">
+            <label for="insumo-factor">Factor de conversión</label>
+            <input type="number" id="insumo-factor" step="0.0001" min="0.0001" value="1000" required>
+          </div>
+          <div class="campo" id="grupo-estado-insumo" style="display:none;">
+            <label for="insumo-estado">Estado</label>
+            <select id="insumo-estado">
+              <option value="Activo">Activo</option>
+              <option value="Inactivo">Inactivo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="caja-conversion" id="preview-conversion">
+          <strong>1 kg = 1000 g</strong><br>
+          <span style="color:var(--texto-suave); font-size:0.84rem;">La receta y el umbral mínimo se registran en gramos.</span>
+        </div>
+
+        <div class="modal-acciones" style="margin-top:18px;">
+          <button type="button" class="btn btn-secundario" onclick="cerrarModal('modal-insumo')">Cancelar</button>
+          <button type="submit" class="btn btn-primario" id="btn-guardar-insumo">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/menu.js"></script>
+  <script src="js/insumos.js"></script>
+</body>
+</html>
