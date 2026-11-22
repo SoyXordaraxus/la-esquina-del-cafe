@@ -5,8 +5,6 @@
 const MOSTRAR_SELECTOR_ROL = false;
 const PAGINA_LOGIN = "login.html";
 
-const CLAVE_USUARIO = "usuario";
-const USUARIO_PRUEBA = { id_usuario: 1, nombre: "Andres Mosso", rol: "Administrador" };
 const BADGES_INICIALES = { "caducidades.html": 4 };
 
 /* ---------- Iconos (SVG de línea, sin librerías) ---------- */
@@ -56,20 +54,23 @@ function escaparHtml(texto) {
 }
 
 function guardarUsuario(usuario) {
-  try { localStorage.setItem(CLAVE_USUARIO, JSON.stringify(usuario)); } catch (e) { /* almacenamiento no disponible */ }
+  try { localStorage.setItem(CLAVE_SESION, JSON.stringify(usuario)); } catch (e) { /* almacenamiento no disponible */ }
 }
 
+// Sesión guardada por login.js (ver config.js). Sin sesión válida se va a login.html.
 function obtenerUsuario() {
-  try {
-    const g = JSON.parse(localStorage.getItem(CLAVE_USUARIO));
-    if (g && g.nombre && (g.rol === "Administrador" || g.rol === "Cajero")) return g;
-  } catch (e) { /* sin sesión válida */ }
-  guardarUsuario(USUARIO_PRUEBA);
-  return { ...USUARIO_PRUEBA };
+  const s = leerSesion();
+  if (s) return { ...s, nombre: s.nombre || s.nombre_usuario || "" };
+  irALogin();
+  return { id_usuario: null, nombre: "", nombre_usuario: "", rol: "" };
+}
+
+function idUsuarioActual() {
+  return obtenerUsuario().id_usuario;
 }
 
 function iniciales(nombre) {
-  return nombre.split(" ").filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join("");
+  return String(nombre || "").split(" ").filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join("");
 }
 
 function actualizarReloj() {
@@ -151,7 +152,7 @@ function mostrarConfirmacion({ titulo = "Confirmar acción", mensaje = "¿Está 
 
 /* ---------- Sesión ---------- */
 function cerrarSesion() {
-  try { localStorage.removeItem(CLAVE_USUARIO); } catch (e) { /* nada */ }
+  try { localStorage.removeItem(CLAVE_SESION); } catch (e) { /* nada */ }
   if (PAGINA_LOGIN) window.location.href = PAGINA_LOGIN;
   else window.location.reload();
 }
@@ -232,17 +233,6 @@ function construirLayout() {
 
   Object.entries(BADGES_INICIALES).forEach(([archivo, n]) => ponerBadge(archivo, n));
 
-  const esDelMenu = MENU_ITEMS.some(i => i.archivo === paginaActual);
-  if (esDelMenu && !permitidos.some(i => i.archivo === paginaActual)) {
-    const zona = document.querySelector(".pantalla");
-    if (zona) {
-      const aviso = document.createElement("div");
-      aviso.className = "alerta-error";
-      aviso.textContent = `El rol ${usuario.rol} no tiene acceso a esta pantalla.`;
-      zona.prepend(aviso);
-    }
-  }
-
   insertarModalConfirmacion();
 }
 
@@ -254,4 +244,20 @@ function ponerBadge(archivo, numero) {
   b.textContent = numero;
 }
 
-document.addEventListener("DOMContentLoaded", construirLayout);
+/* ---------- Protección por rol (antes de que la página haga peticiones) ---------- */
+function protegerPagina() {
+  const usuario = leerSesion();
+  if (!usuario) { irALogin(); return false; }
+  const pagina = (window.location.pathname.split("/").pop() || "").toLowerCase();
+  const item = MENU_ITEMS.find(i => i.archivo === pagina);
+  if (item && !item.roles.includes(usuario.rol)) {
+    // Ej.: un Cajero que abre inicio.html se manda a su primera pantalla (Caja)
+    const destino = MENU_ITEMS.find(i => i.roles.includes(usuario.rol));
+    window.location.replace(destino ? destino.archivo : PAGINA_LOGIN);
+    return false;
+  }
+  return true;
+}
+
+const PAGINA_PERMITIDA = protegerPagina();
+if (PAGINA_PERMITIDA) document.addEventListener("DOMContentLoaded", construirLayout);

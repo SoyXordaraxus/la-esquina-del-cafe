@@ -42,7 +42,7 @@ function descargarArchivo(formato) {
   if (inicio) params.append("fecha_inicio", inicio);
   if (fin) params.append("fecha_fin", fin);
 
-  window.open(`${API_ADMIN}/reportes/exportar?${params.toString()}`, "_blank");
+  window.open(conToken(`${API_ADMIN}/reportes/exportar?${params.toString()}`), "_blank");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

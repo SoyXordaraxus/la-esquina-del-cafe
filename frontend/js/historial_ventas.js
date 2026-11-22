@@ -49,14 +49,8 @@ function esAdministrador() {
   return obtenerUsuario().rol === "Administrador";
 }
 
-// El login todavía no guarda id_usuario en la sesión.
-// MODO DEV: si no viene, se usa 1 (Andres Mosso, Admin) o 2 (Osvaldo, Cajero) del seed.
-// El backend vuelve a validar el rol, así que un Cajero nunca puede cancelar.
-function idUsuarioActual() {
-  const u = obtenerUsuario();
-  if (u.id_usuario) return u.id_usuario;
-  return u.rol === "Administrador" ? 1 : 2;
-}
+// idUsuarioActual() viene de menu.js (sesión real). El backend vuelve a validar el rol
+// con el token, así que un Cajero nunca puede cancelar.
 
 function mostrarError(idElemento, texto) {
   const el = document.getElementById(idElemento);

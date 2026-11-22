@@ -7,6 +7,7 @@ from sqlalchemy import func
 from database import get_db
 from models import Usuario, Insumo, LoteInsumo, Venta, Merma
 from services.bitacora import registrar_bitacora
+from services.sesion import crear_token, requiere_admin, rol_normalizado
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 
@@ -43,23 +44,25 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
 
     # Normalizar rol para el contrato del frontend ("Administrador" | "Cajero")
-    rol_norm = "Administrador" if "admin" in usuario.rol.lower() else "Cajero"
+    rol_norm = rol_normalizado(usuario.rol)
 
     registrar_bitacora(db, usuario.id_usuario, "SESION_INICIADA", f"Inicio de sesión correcto · Rol: {rol_norm}")
     db.commit()
 
     return {
         "id_usuario": usuario.id_usuario,
-        "nombre": usuario.nombre_usuario,
+        "nombre_usuario": usuario.nombre_usuario,
+        "nombre": usuario.nombre_usuario,   # lo usa menu.js para el avatar
         "correo": usuario.correo,
         "rol": rol_norm,
+        "token": crear_token(usuario),
     }
 
 
 # ==========================================
 # 1. PANEL PRINCIPAL (02_Panel)
 # ==========================================
-@router.get("/dashboard/resumen")
+@router.get("/dashboard/resumen", dependencies=[Depends(requiere_admin)])
 def obtener_resumen_dia(db: Session = Depends(get_db)):
     hoy = date.today()
     limite_caducidad = hoy + timedelta(days=5)  # RF 6.1: alertas hasta 5 días
@@ -194,7 +197,7 @@ def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float)
         return {"color": "rojo", "etiqueta": "Existencias críticas", "porcentaje": porcentaje}
 
 
-@router.get("/inventario/semaforo")
+@router.get("/inventario/semaforo", dependencies=[Depends(requiere_admin)])
 def obtener_inventario_semaforo(db: Session = Depends(get_db)):
     hoy = date.today()
     insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()

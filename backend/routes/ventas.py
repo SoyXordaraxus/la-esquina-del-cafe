@@ -31,6 +31,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models import Usuario
+from services.sesion import requiere_admin, usuario_actual
 from services.venta_service import (
     MENSAJE_STOCK,
     MOTIVOS_CANCELACION,
@@ -56,26 +58,26 @@ class DetalleCobro(BaseModel):
 
 
 class CobroEntrada(BaseModel):
-    id_usuario: int = 1
+    id_usuario: Optional[int] = None        # se ignora: el cajero se toma de la sesión
     forma_pago: str                         # "Efectivo" | "Tarjeta externa"
     monto_recibido: Optional[float] = None  # solo aplica con Efectivo
     detalles: List[DetalleCobro] = Field(min_length=1)
 
 
 class CancelacionEntrada(BaseModel):
-    id_usuario: int          # quien autoriza; debe tener rol Administrador
+    id_usuario: Optional[int] = None   # se ignora: quien autoriza se toma de la sesión
     motivo: str              # uno de MOTIVOS_CANCELACION
 
 
 # ---------- Endpoints ----------
-@router.get("/productos-disponibles")
+@router.get("/productos-disponibles", dependencies=[Depends(usuario_actual)])
 def productos_disponibles(db: Session = Depends(get_db)):
     """Productos activos con 'disponible' = true/false según el stock vigente."""
     return listar_productos_disponibles(db)
 
 
 @router.post("/cobrar", status_code=201)
-def cobrar(datos: CobroEntrada, db: Session = Depends(get_db)):
+def cobrar(datos: CobroEntrada, db: Session = Depends(get_db), cajero: Usuario = Depends(usuario_actual)):
     """
     Registra la venta. Respuestas:
       201 -> venta guardada (incluye id_venta y cambio)
@@ -87,7 +89,7 @@ def cobrar(datos: CobroEntrada, db: Session = Depends(get_db)):
     try:
         resultado = registrar_venta(
             db,
-            id_usuario=datos.id_usuario,
+            id_usuario=cajero.id_usuario,
             forma_pago=datos.forma_pago,
             monto_recibido=datos.monto_recibido,
             items=[d.model_dump() for d in datos.detalles],
@@ -113,13 +115,13 @@ def motivos_cancelacion():
     return list(MOTIVOS_CANCELACION)
 
 
-@router.get("/historial")
+@router.get("/historial", dependencies=[Depends(requiere_admin)])
 def historial(fecha: Optional[date] = None, limite: int = 100, db: Session = Depends(get_db)):
     """Ventas más recientes primero. ?fecha=2026-11-18 filtra un día."""
     return listar_ventas(db, fecha=fecha, limite=min(max(limite, 1), 500))
 
 
-@router.get("/{id_venta}")
+@router.get("/{id_venta}", dependencies=[Depends(requiere_admin)])
 def detalle_venta(id_venta: int, db: Session = Depends(get_db)):
     """Detalle con el precio cobrado y los insumos que realmente se descontaron."""
     try:
@@ -129,7 +131,7 @@ def detalle_venta(id_venta: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{id_venta}/cancelar")
-def cancelar(id_venta: int, datos: CancelacionEntrada, db: Session = Depends(get_db)):
+def cancelar(id_venta: int, datos: CancelacionEntrada, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
     """
     Respuestas:
       200 -> venta cancelada; insumos devueltos a su lote (o a merma si caducó)
@@ -139,7 +141,7 @@ def cancelar(id_venta: int, datos: CancelacionEntrada, db: Session = Depends(get
       400 -> motivo no válido
     """
     try:
-        return cancelar_venta(db, id_venta=id_venta, id_usuario=datos.id_usuario, motivo=datos.motivo)
+        return cancelar_venta(db, id_venta=id_venta, id_usuario=admin.id_usuario, motivo=datos.motivo)
     except NoAutorizado as error:
         raise HTTPException(status_code=403, detail=str(error))
     except NoEncontrado as error:

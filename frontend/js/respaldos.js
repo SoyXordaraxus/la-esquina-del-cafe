@@ -21,7 +21,7 @@ async function cargarRespaldos() {
       <td><strong>${escaparHtml(r.folio)}</strong> · ${escaparHtml(r.ubicacion)}</td>
       <td>${escaparHtml(r.tamano)}</td>
       <td>
-        <a href="${API_BKP}/descargar/${encodeURIComponent(r.archivo)}" class="btn btn-secundario">Descargar .SQL</a>
+        <a href="${conToken(`${API_BKP}/descargar/${encodeURIComponent(r.archivo)}`)}" class="btn btn-secundario">Descargar .SQL</a>
       </td>
     </tr>
   `).join("");

@@ -7,8 +7,9 @@ from sqlalchemy import func
 
 from database import get_db
 from models import Usuario, Insumo, Proveedor, LoteInsumo, MovimientoInventario, Merma, Bitacora
+from services.sesion import usuario_actual
 
-router = APIRouter(prefix="/api/almacen", tags=["Almacén"])
+router = APIRouter(prefix="/api/almacen", tags=["Almacén"], dependencies=[Depends(usuario_actual)])
 
 MOTIVOS_MERMA = (
     "Caducidad",
@@ -173,7 +174,8 @@ def listar_lotes(db: Session = Depends(get_db)):
 
 
 @router.post("/recepcion")
-def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_db)):
+def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_db), actual: Usuario = Depends(usuario_actual)):
+    datos.id_usuario = actual.id_usuario
     insumo = db.query(Insumo).filter(Insumo.id_insumo == datos.id_insumo).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="El insumo seleccionado no existe.")
@@ -255,7 +257,8 @@ def listar_mermas(db: Session = Depends(get_db)):
 
 
 @router.post("/mermas")
-def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db)):
+def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db), actual: Usuario = Depends(usuario_actual)):
+    datos.id_usuario = actual.id_usuario   # RF 11.1: el rol se toma de la sesión, no del navegador
     if datos.motivo not in MOTIVOS_MERMA:
         raise HTTPException(status_code=400, detail="Motivo de merma no válido.")
 

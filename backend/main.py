@@ -11,7 +11,8 @@ from database import SessionLocal
 from models import Usuario
 from routes import auth_tableros, ventas, almacen, catalogos, reportes_admin
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s:     %(name)s - %(message)s")
+logging.getLogger("esquina").setLevel(logging.INFO)
 logger = logging.getLogger("esquina")
 
 app = FastAPI(title="La Esquina del Café - API")

@@ -12,6 +12,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import get_db, engine
+from services.sesion import requiere_admin, usuario_actual
 from models import (
     Usuario,
     Insumo,
@@ -23,7 +24,11 @@ from models import (
     Bitacora,
 )
 
-router = APIRouter(prefix="/api/admin", tags=["Administración, Reportes y Auditoría"])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["Administración, Reportes y Auditoría"],
+    dependencies=[Depends(requiere_admin)],
+)
 
 CARPETA_BACKUPS = Path(__file__).resolve().parent.parent / "backups"
 CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
@@ -261,9 +266,10 @@ def exportar_reporte(
     formato: str = "csv",
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
-    id_usuario: int = 1,
     db: Session = Depends(get_db),
+    admin: Usuario = Depends(requiere_admin),
 ):
+    id_usuario = admin.id_usuario
     hoy = date.today()
     f_fin = fecha_fin or hoy
     f_ini = fecha_inicio or (f_fin - timedelta(days=30))
@@ -340,7 +346,8 @@ def listar_usuarios(db: Session = Depends(get_db)):
 
 
 @router.post("/usuarios", status_code=201)
-def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db)):
+def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_admin = admin.id_usuario
     nombre = datos.nombre_usuario.strip()
     correo = datos.correo.strip().lower()
     if not nombre or not correo:
@@ -374,7 +381,8 @@ def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db)):
 
 
 @router.put("/usuarios/{id_usuario}")
-def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = Depends(get_db)):
+def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_admin = admin.id_usuario
     usr = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
     if not usr:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
@@ -565,8 +573,8 @@ def generar_respaldo(db: Session, tipo: str, id_usuario: int) -> dict:
 
 
 @router.post("/respaldos/ejecutar")
-def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session = Depends(get_db)):
-    return generar_respaldo(db, tipo, id_usuario)
+def ejecutar_respaldo_sql(tipo: str = "manual", db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    return generar_respaldo(db, tipo, admin.id_usuario)
 
 
 @router.get("/respaldos/descargar/{nombre_archivo}")

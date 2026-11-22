@@ -256,9 +256,8 @@ async function procesarVenta() {
     }
   }
 
-  const usuarioActivo = JSON.parse(localStorage.getItem("usuario") || '{"id_usuario": 1}');
   const payload = {
-    id_usuario: usuarioActivo.id_usuario || 1,
+    id_usuario: idUsuarioActual(),   // informativo: el backend toma al cajero de la sesión
     forma_pago: formaPago,
     monto_recibido: montoRecibido,
     detalles: comanda.map(item => ({

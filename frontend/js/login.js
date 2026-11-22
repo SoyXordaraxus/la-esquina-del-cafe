@@ -28,8 +28,19 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(data.detail || "Usuario o contraseña incorrectos.");
       }
 
-      const sesion = data.usuario || data;
-      localStorage.setItem("usuario", JSON.stringify(sesion));
+      const datos = data.usuario || data;
+      if (!datos.id_usuario || !datos.token || !datos.rol) {
+        throw new Error("Respuesta de inicio de sesión incompleta. Intenta de nuevo.");
+      }
+      const sesion = {
+        id_usuario: datos.id_usuario,
+        nombre_usuario: datos.nombre_usuario || datos.nombre,
+        nombre: datos.nombre || datos.nombre_usuario,
+        correo: datos.correo,
+        rol: datos.rol,
+        token: datos.token,
+      };
+      localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
 
       if (sesion.rol === "Administrador") {
         window.location.href = "inicio.html";
