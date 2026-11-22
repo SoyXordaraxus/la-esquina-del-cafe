@@ -13,7 +13,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import get_db, engine
-from services.contrasenas import hashear
+from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear
 from services.sesion import requiere_admin
 from services.tiempo import ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
 from models import (
@@ -332,11 +332,8 @@ def _validar_correo(correo: str):
 
 
 def _validar_password_rf11(pwd: str):
-    if len(pwd) < 8 or not any(c.isalpha() for c in pwd) or not any(c.isdigit() for c in pwd):
-        raise HTTPException(
-            status_code=400,
-            detail="La contraseña debe ser alfanumérica (letras y números) y tener al menos 8 caracteres.",
-        )
+    if not cumple_politica(pwd):
+        raise HTTPException(status_code=400, detail=MENSAJE_POLITICA)
 
 
 @router.get("/usuarios")

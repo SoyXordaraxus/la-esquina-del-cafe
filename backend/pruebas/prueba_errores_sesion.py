@@ -20,6 +20,7 @@ if not os.getenv("DATABASE_URL"):
     os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/prueba_err.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 import seed  # noqa: E402
 from main import app  # noqa: E402
@@ -82,7 +83,7 @@ for ruta, esperado in [("/usuarios.html", True), ("/login.html", True), ("/caja.
 ok("no-store" not in c.get("/api/ventas/motivos-cancelacion").headers.get("cache-control", ""), "el API no lleva no-store")
 
 print("== 401 en TODO el API sin token o con token inválido")
-PUBLICAS = {("POST", "/api/auth/login"), ("GET", "/api/ventas/motivos-cancelacion")}
+PUBLICAS = {("POST", "/api/auth/login"), ("POST", "/api/auth/recuperar"), ("GET", "/api/ventas/motivos-cancelacion")}
 rutas = c.get("/openapi.json").json()["paths"]
 revisadas = 0
 for ruta, metodos in rutas.items():
@@ -101,6 +102,43 @@ ok(revisadas >= 25, f"{revisadas} rutas protegidas responden 401 sin token / tok
 c.put(f"/api/admin/usuarios/{nuevo}", headers=A, json={"nombre_usuario": "Otro", "correo": "otro@x.mx", "rol": "Cajero", "estado": "Inactivo"})
 otro_token = c.post("/api/auth/login", json={"usuario": "otro@x.mx", "contrasena": "clave1234"})
 ok(otro_token.status_code == 403, "cuenta desactivada no inicia sesión")
+
+print("== Recuperar contraseña con Código Maestro (público, sin token)")
+from database import SessionLocal  # noqa: E402
+from models import Usuario  # noqa: E402
+from routes.auth_tableros import CODIGO_MAESTRO_RECUPERACION  # noqa: E402
+from services.contrasenas import es_hash, verificar  # noqa: E402
+
+ok(CODIGO_MAESTRO_RECUPERACION == os.getenv("CODIGO_MAESTRO", "CAFE-MAESTRO-2026"), "código maestro sale de CODIGO_MAESTRO (por defecto CAFE-MAESTRO-2026)")
+REC = {"usuario": "osvaldo@esquinadelcafe.mx", "codigo_maestro": CODIGO_MAESTRO_RECUPERACION}
+r = c.post("/api/auth/recuperar", json={**REC, "codigo_maestro": "CODIGO-MALO", "nueva_contrasena": "nueva2026"})
+ok(r.status_code == 403 and "Código Maestro" in r.json()["detail"], f"código maestro incorrecto -> {r.status_code}: {r.json().get('detail')}")
+muestras["rec_codigo_malo"] = r.json()
+r = c.post("/api/auth/recuperar", json={**REC, "nueva_contrasena": "solotexto"})
+ok(r.status_code == 400 and "alfanumérica" in r.json()["detail"], f"nueva contraseña sin números -> {r.status_code}")
+r = c.post("/api/auth/recuperar", json={**REC, "nueva_contrasena": "abc1"})
+ok(r.status_code == 400 and "alfanumérica" in r.json()["detail"], f"nueva contraseña de 4 caracteres -> {r.status_code}")
+r = c.post("/api/auth/recuperar", json={**REC, "usuario": "nadie@x.mx", "nueva_contrasena": "nueva2026"})
+ok(r.status_code == 404, f"usuario inexistente -> {r.status_code}")
+r = c.post("/api/auth/recuperar", json={**REC, "usuario": "otro@x.mx", "nueva_contrasena": "nueva2026"})
+ok(r.status_code == 403 and "desactivada" in r.json()["detail"], f"cuenta desactivada no se recupera -> {r.status_code}")
+r = c.post("/api/auth/recuperar", json={"usuario": "x"})
+muestras["rec_faltan"] = r.json()
+
+# Sin cabecera de token (y con un token falso, como el que dejaría una sesión vieja)
+r = c.post("/api/auth/recuperar", json={**REC, "nueva_contrasena": "nueva2026"}, headers={"Authorization": "Bearer token-falso"})
+ok(r.status_code == 200 and "mensaje" in r.json(), f"código correcto -> {r.status_code}: {r.json()}")
+r = c.post("/api/auth/login", json={"usuario": "Osvaldo Vazquez", "contrasena": "nueva2026"})
+ok(r.status_code == 200 and r.json().get("token"), f"login con la nueva contraseña -> {r.status_code}")
+r = c.post("/api/auth/login", json={"usuario": "Osvaldo Vazquez", "contrasena": "cajero123"})
+ok(r.status_code == 401, f"login con la contraseña anterior -> {r.status_code}")
+with SessionLocal() as db:
+    u = db.query(Usuario).filter(Usuario.correo == "osvaldo@esquinadelcafe.mx").one()
+    guardada = u.contrasena
+    ultima = db.execute(text("SELECT accion, id_usuario FROM bitacora ORDER BY id_bitacora DESC LIMIT 5")).fetchall()
+ok(es_hash(guardada) and "nueva2026" not in guardada and verificar("nueva2026", guardada),
+   f"la nueva contraseña queda hasheada en la base ({guardada[:20]}...)")
+ok(any(a == "RECUPERACION_CONTRASENA" and i == u.id_usuario for a, i in ultima), "bitácora registra RECUPERACION_CONTRASENA")
 
 # ------------------------------------------------------------------ frontend
 NODE = shutil.which("node")
@@ -124,7 +162,7 @@ function contexto(sesion) {
   };
   ctx.window = { location: { protocol: "http:", hostname: "127.0.0.1", port: "8000", origin: "http://127.0.0.1:8000",
                              pathname: "/usuarios.html", replace: u => ctx.reemplazos.push(u) },
-                 fetch: async () => ctx.respuestaFalsa,
+                 fetch: async (u, o) => { ctx.ultimaPeticion = o || {}; return ctx.respuestaFalsa; },
                  addEventListener: (ev, fn) => (oyentes[ev] = oyentes[ev] || []).push(fn) };
   ctx.window.window = ctx.window;
   ctx.location = ctx.window.location;
@@ -152,6 +190,17 @@ vm.runInContext(`fetch(API_BASE + "/api/admin/usuarios")`, c401).then(() => {
   const cLogin = contexto(null); cLogin.respuestaFalsa = { status: 401 };
   return vm.runInContext(`fetch(API_BASE + "/api/auth/login", {method: "POST"})`, cLogin).then(() => { res.r401login = cLogin.reemplazos; });
 }).then(() => {
+  // 403 de /api/auth/recuperar (código maestro malo) con una sesión guardada: no la borra,
+  // no redirige y no manda el token
+  const cRec = contexto(sesion); cRec.respuestaFalsa = { status: 403 };
+  return vm.runInContext(`fetch(API_BASE + "/api/auth/recuperar", {method: "POST", headers: {"Content-Type": "application/json"}})`, cRec)
+    .then(() => {
+      const h = cRec.ultimaPeticion.headers || {};
+      res.r403rec = { sesion: !!cRec.almacen.usuario, reemplazos: cRec.reemplazos, auth: "Authorization" in (h.h || h) };
+      // Control: a una ruta protegida sí se le agrega el token
+      return vm.runInContext(`fetch(API_BASE + "/api/admin/usuarios")`, cRec);
+    }).then(() => { res.authProtegida = "Authorization" in ((cRec.ultimaPeticion.headers || {}).h || {}); });
+}).then(() => {
   // menu.js: con sesión no redirige; tras cerrar sesión, pageshow (bfcache) manda a login
   const cm = contexto(sesion);
   vm.runInContext(fs.readFileSync(raiz + "/frontend/js/menu.js", "utf8"), cm);
@@ -175,7 +224,7 @@ vm.runInContext(`fetch(API_BASE + "/api/admin/usuarios")`, c401).then(() => {
         ok(False, "Node falló: " + salida.stderr[-500:])
     else:
         res = json.loads(salida.stdout.strip().splitlines()[-1])
-        for k in ("pass_corta", "faltan_campos", "producto_invalido", "merma_tipos"):
+        for k in ("pass_corta", "faltan_campos", "producto_invalido", "merma_tipos", "rec_codigo_malo", "rec_faltan"):
             print(f"        {k}: {res[k]}")
         ok(res["pass_corta"] == "La contraseña debe tener al menos 8 caracteres.", "422 contraseña corta -> texto en español (no [object Object])")
         ok("El nombre de usuario es obligatorio." in res["faltan_campos"] and "La contraseña es obligatoria." in res["faltan_campos"], "422 campos faltantes")
@@ -187,6 +236,10 @@ vm.runInContext(`fetch(API_BASE + "/api/admin/usuarios")`, c401).then(() => {
         ok(res["red"].startswith("No se pudo conectar con el servidor"), "fallo de red -> mensaje en español")
         ok(res["r401"] == {"sesion": None, "reemplazos": ["login.html"]}, f"401 del API limpia la sesión y manda a login.html: {res['r401']}")
         ok(res["r401login"] == [], "401 del login (contraseña mala) no redirige")
+        ok(res["authProtegida"] is True, "control: las rutas protegidas sí llevan el token")
+        ok(res["r403rec"] == {"sesion": True, "reemplazos": [], "auth": False}, f"403 de recuperar (código maestro malo) no cierra sesión ni manda token: {res['r403rec']}")
+        ok(res["rec_codigo_malo"] == "El Código Maestro de recuperación es incorrecto.", f"mensajeError del 403 de recuperar: {res['rec_codigo_malo']}")
+        ok("El Código Maestro es obligatorio." in res["rec_faltan"] and "La nueva contraseña es obligatoria." in res["rec_faltan"], f"mensajeError del 422 de recuperar: {res['rec_faltan']}")
         ok(res["menuInicial"] == [] and res["menuPageshow"] == ["login.html"], f"pageshow sin sesión (bfcache) -> login.html: {res['menuPageshow']}")
         ok(res["cajeroAdmin"] == ["caja.html"], f"cajero en pantalla de admin -> caja.html: {res['cajeroAdmin']}")
         ok(res["logout"] == {"reemplazos": ["login.html"], "sesion": None}, f"cerrarSesion borra la sesión y usa location.replace: {res['logout']}")

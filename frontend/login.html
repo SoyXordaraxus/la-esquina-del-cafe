@@ -65,6 +65,31 @@
       font-size: 1rem;
       margin-top: 6px;
     }
+    .login-recuperar-link {
+      margin-top: 16px;
+      text-align: center;
+    }
+    .login-recuperar-link button {
+      background: none;
+      border: none;
+      color: var(--cafe, #4a3222);
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    .login-recuperar-link button:hover {
+      opacity: 0.8;
+    }
+    .alerta-exito {
+      background: #eaf7ee;
+      border: 1px solid #a3d9b5;
+      color: #1e6638;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body class="login-page">
@@ -83,6 +108,7 @@
     <p class="sub">Ingresa tus datos para continuar.</p>
 
     <div id="login-error" class="alerta-error" style="display:none; margin-bottom:16px; text-align:left;"></div>
+    <div id="login-ok" class="alerta-exito" style="display:none; margin-bottom:16px; text-align:left;"></div>
 
     <form id="form-login" class="login-form" autocomplete="off">
       <div class="campo">
@@ -98,10 +124,52 @@
 
       <button type="submit" class="btn btn-primario btn-login" id="btn-login">Iniciar sesión</button>
     </form>
+
+    <div class="login-recuperar-link">
+      <button type="button" id="btn-abrir-recuperar">¿Olvidaste tu contraseña?</button>
+    </div>
   </main>
 
-  <script src="js/config.js"></script>
+  <!-- Modal de recuperación local con Código Maestro -->
+  <div class="modal-fondo" id="modal-recuperar" role="dialog" aria-modal="true" aria-labelledby="rec-titulo" aria-hidden="true">
+    <div class="modal" style="max-width: 420px; text-align: left;">
+      <h2 id="rec-titulo">Recuperar contraseña</h2>
+      <p style="color: var(--texto-suave, #6f6257); margin-bottom: 14px;">
+        Ingresa tu usuario o correo junto con el <strong>Código Maestro</strong> del establecimiento para asignar una nueva contraseña.
+      </p>
 
-  <script src="js/login.js"></script>
+      <div id="rec-error" class="alerta-error" style="display:none; margin-bottom:14px;"></div>
+
+      <form id="form-recuperar" class="login-form" autocomplete="off">
+        <div class="campo">
+          <label for="rec-usuario">Usuario o correo</label>
+          <input type="text" id="rec-usuario" placeholder="Ej. admin o admin@esquinadelcafe.mx" required>
+        </div>
+
+        <div class="campo">
+          <label for="rec-codigo">Código Maestro</label>
+          <input type="password" id="rec-codigo" placeholder="Ingresa el código maestro" required>
+        </div>
+
+        <div class="campo">
+          <label for="rec-nueva">Nueva contraseña</label>
+          <input type="password" id="rec-nueva" placeholder="Mín. 8 caracteres, letras y números" minlength="8" required>
+        </div>
+
+        <div class="campo">
+          <label for="rec-confirmar">Confirmar nueva contraseña</label>
+          <input type="password" id="rec-confirmar" placeholder="Repite la nueva contraseña" minlength="8" required>
+        </div>
+
+        <div class="modal-acciones" style="margin-top: 18px;">
+          <button type="button" class="btn btn-secundario" id="btn-cancelar-rec">Cancelar</button>
+          <button type="submit" class="btn btn-primario" id="btn-guardar-rec">Restablecer contraseña</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/login.js?v=4"></script>
 </body>
 </html>

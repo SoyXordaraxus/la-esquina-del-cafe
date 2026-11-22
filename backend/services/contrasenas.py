@@ -55,3 +55,12 @@ def necesita_rehash(guardada: str) -> bool:
         return int(guardada.split("$")[1]) < ITERACIONES
     except (IndexError, ValueError):
         return True
+
+
+# Política de contraseñas (RF 1.1): la usan el alta/edición de usuarios y la recuperación
+MENSAJE_POLITICA = "La contraseña debe ser alfanumérica (letras y números) y tener al menos 8 caracteres."
+
+
+def cumple_politica(contrasena: str) -> bool:
+    pwd = contrasena or ""
+    return len(pwd) >= 8 and any(c.isalpha() for c in pwd) and any(c.isdigit() for c in pwd)

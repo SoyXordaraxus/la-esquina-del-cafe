@@ -45,12 +45,17 @@ function conToken(url) {
 
 // Toda petición al API lleva "Authorization: Bearer <token>". Si el servidor responde
 // 401 (sin sesión, expirada o cuenta desactivada) se regresa al login.
+// Las rutas públicas (login y recuperar contraseña) no llevan token y sus errores
+// (401 contraseña mala, 403 código maestro incorrecto) nunca cierran la sesión.
+const RUTAS_PUBLICAS = ["/api/auth/login", "/api/auth/recuperar"];
+
 (() => {
   const fetchOriginal = window.fetch.bind(window);
   window.fetch = async (recurso, opciones = {}) => {
     const url = typeof recurso === "string" ? recurso : (recurso && recurso.url) || "";
     const esApi = url.startsWith(`${API_BASE}/api/`);
-    const esLogin = url.includes("/api/auth/login");
+    const ruta = url.slice(API_BASE.length).split("?")[0];
+    const esLogin = RUTAS_PUBLICAS.includes(ruta);
     const sesion = leerSesion();
     if (esApi && !esLogin && sesion) {
       const cabeceras = new Headers(opciones.headers || {});
@@ -101,7 +106,8 @@ function fechaHoraNegocio(iso, opciones = {}) {
      - detail como lista de errores 422 de FastAPI/pydantic
      - sin detail (500, respuesta vacía o no JSON) -> texto de respaldo */
 const CAMPOS_API = {
-  contrasena: ["La contraseña", "f"], correo: ["El correo electrónico", "m"],
+  contrasena: ["La contraseña", "f"], nueva_contrasena: ["La nueva contraseña", "f"],
+  codigo_maestro: ["El Código Maestro", "m"], correo: ["El correo electrónico", "m"],
   nombre_usuario: ["El nombre de usuario", "m"], usuario: ["El usuario", "m"],
   rol: ["El rol", "m"], estado: ["El estado", "m"],
   nombre: ["El nombre", "m"], categoria: ["La categoría", "f"],

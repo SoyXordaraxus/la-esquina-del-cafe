@@ -1,17 +1,22 @@
+import hmac
+import os
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
 from models import Usuario, Insumo, LoteInsumo, Venta, Merma
 from services.bitacora import registrar_bitacora
-from services.contrasenas import hashear, necesita_rehash, verificar
+from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear, necesita_rehash, verificar
 from services.sesion import crear_token, requiere_admin, rol_normalizado
 from services.tiempo import NOMBRE_ZONA, hoy_local, rango_utc
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
+
+# Código maestro del establecimiento para recuperar contraseñas sin correo (variable CODIGO_MAESTRO)
+CODIGO_MAESTRO_RECUPERACION = os.getenv("CODIGO_MAESTRO", "CAFE-MAESTRO-2026")
 
 
 class LoginSchema(BaseModel):
@@ -19,8 +24,14 @@ class LoginSchema(BaseModel):
     contrasena: str
 
 
+class RecuperarContrasenaSchema(BaseModel):
+    usuario: str = Field(..., min_length=1)
+    codigo_maestro: str = Field(..., min_length=1)
+    nueva_contrasena: str = Field(..., min_length=1)   # la política se valida en el endpoint
+
+
 # ==========================================
-# 0. INICIO DE SESIÓN (RF 1, RF 1.1, RF 1.2, RF 13)
+# 0. INICIO DE SESIÓN Y RECUPERACIÓN (RF 1, RF 1.1, RF 1.2, RF 13)
 # ==========================================
 @router.post("/auth/login")
 def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
@@ -64,6 +75,49 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         "token": crear_token(usuario),
         "zona_horaria": NOMBRE_ZONA,        # config.js la usa para mostrar fechas
     }
+
+
+# Público (sin token), igual que el login. El 403 por código incorrecto no es "sesión
+# vencida": config.js solo cierra sesión con 401 y además excluye esta ruta.
+@router.post("/auth/recuperar")
+def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends(get_db)):
+    codigo = (datos.codigo_maestro or "").strip().encode("utf-8")
+    if not hmac.compare_digest(codigo, CODIGO_MAESTRO_RECUPERACION.encode("utf-8")):
+        raise HTTPException(status_code=403, detail="El Código Maestro de recuperación es incorrecto.")
+
+    user_input = (datos.usuario or "").strip()
+    nueva_pass = (datos.nueva_contrasena or "").strip()
+
+    if not user_input:
+        raise HTTPException(status_code=400, detail="Escribe tu usuario o correo.")
+    if not cumple_politica(nueva_pass):
+        raise HTTPException(status_code=400, detail=MENSAJE_POLITICA)
+
+    usuario = (
+        db.query(Usuario)
+        .filter(
+            (func.lower(Usuario.nombre_usuario) == user_input.lower()) |
+            (func.lower(Usuario.correo) == user_input.lower())
+        )
+        .first()
+    )
+
+    if not usuario:
+        raise HTTPException(status_code=404, detail="No se encontró ningún usuario o correo registrado con ese dato.")
+
+    if (usuario.estado or "").lower() != "activo":
+        raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
+
+    usuario.contrasena = hashear(nueva_pass)
+    registrar_bitacora(
+        db,
+        usuario.id_usuario,
+        "RECUPERACION_CONTRASENA",
+        f"Restablecimiento local de contraseña mediante Código Maestro para '{usuario.nombre_usuario}'."
+    )
+    db.commit()
+
+    return {"mensaje": f"Contraseña actualizada correctamente para {usuario.nombre_usuario}. Ya puedes iniciar sesión."}
 
 
 # ==========================================
