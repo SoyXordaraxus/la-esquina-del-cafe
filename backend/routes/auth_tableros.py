@@ -122,6 +122,9 @@ def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends
 
 # ==========================================
 # 1. PANEL PRINCIPAL (02_Panel)
+# Cada alerta trae id_insumo, id_lote y "destino" (pantalla a la que lleva el
+# botón de Acciones): Reabastecer -> recepcion.html?insumo=, Registrar merma ->
+# mermas.html?lote=, Ver lote -> caducidades.html?lote=. Solo Administrador.
 # ==========================================
 @router.get("/dashboard/resumen", dependencies=[Depends(requiere_admin)])
 def obtener_resumen_dia(db: Session = Depends(get_db)):
@@ -167,6 +170,9 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
             insumos_bajo_minimo += 1
             lote_ref = lotes_vigentes[0].numero_factura if lotes_vigentes and lotes_vigentes[0].numero_factura else f"INS-{ins.id_insumo:03d}"
             alertas.append({
+                "id_insumo": ins.id_insumo,
+                "id_lote": lotes_vigentes[0].id_lote if lotes_vigentes else None,
+                "destino": f"recepcion.html?insumo={ins.id_insumo}",
                 "insumo": ins.nombre,
                 "lote": lote_ref,
                 "vencimiento": f"Mínimo: {minimo:g} {ins.unidad_medida}",
@@ -200,6 +206,9 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
         if dias < 0:
             texto_venc = "Venció ayer" if dias == -1 else f"Venció hace {abs(dias)} días"
             alertas.insert(0, {
+                "id_insumo": ins.id_insumo,
+                "id_lote": lote.id_lote,
+                "destino": f"mermas.html?lote={lote.id_lote}",
                 "insumo": ins.nombre,
                 "lote": codigo_lote,
                 "vencimiento": texto_venc,
@@ -212,6 +221,9 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
         elif dias <= 3:
             texto_venc = "Vence hoy" if dias == 0 else ("Vence mañana" if dias == 1 else f"Vence en {dias} días")
             alertas.append({
+                "id_insumo": ins.id_insumo,
+                "id_lote": lote.id_lote,
+                "destino": f"caducidades.html?lote={lote.id_lote}",
                 "insumo": ins.nombre,
                 "lote": codigo_lote,
                 "vencimiento": texto_venc,
@@ -223,6 +235,9 @@ def obtener_resumen_dia(db: Session = Depends(get_db)):
             })
         else:
             alertas.append({
+                "id_insumo": ins.id_insumo,
+                "id_lote": lote.id_lote,
+                "destino": f"caducidades.html?lote={lote.id_lote}",
                 "insumo": ins.nombre,
                 "lote": codigo_lote,
                 "vencimiento": f"Vence en {dias} días",

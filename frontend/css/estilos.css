@@ -65,7 +65,6 @@ body.modal-abierto { overflow: hidden; }
 }
 .topbar-der { display: flex; align-items: center; gap: 20px; }
 .topbar-fecha { text-align: right; font-size: 0.78rem; color: var(--texto-suave); line-height: 1.4; }
-.btn-icono { background: none; border: none; cursor: pointer; color: var(--texto); display: grid; place-items: center; padding: 4px; }
 .topbar-usuario { display: flex; align-items: center; gap: 10px; }
 .avatar {
   width: 34px; height: 34px; border-radius: 50%;
@@ -152,17 +151,27 @@ body.modal-abierto { overflow: hidden; }
 /* ---------- 5. Botones, formularios y alertas ---------- */
 .card { background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); padding: 18px 20px; margin-bottom: 18px; }
 
+/* .btn sirve igual en <button> y en <a href>: mismo alto (line-height fijo), padding,
+   borde, color y hover. En <a> no hay subrayado ni color de enlace visitado. */
 .btn {
   padding: 11px 20px; border-radius: 8px; cursor: pointer;
-  font-size: 0.92rem; font-weight: 600; font-family: inherit;
+  font-size: 0.92rem; font-weight: 600; font-family: inherit; line-height: 1.2;
   border: 1px solid transparent; transition: background 0.15s, opacity 0.15s;
 }
-.btn-primario { background: var(--cafe-oscuro); color: #fff; }
-.btn-primario:hover:not(:disabled) { background: var(--cafe-medio); }
-.btn-secundario { background: #fff; color: var(--cafe-oscuro); border-color: var(--cafe-oscuro); }
-.btn-secundario:hover:not(:disabled) { background: var(--panel); }
-.btn-peligro { background: var(--rojo); color: #fff; }
+a.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  vertical-align: middle; white-space: nowrap; text-decoration: none; text-align: center;
+}
+a.btn:hover, a.btn:focus, a.btn:active { text-decoration: none; }
+.btn-primario, a.btn-primario:link, a.btn-primario:visited { background: var(--cafe-oscuro); color: #fff; }
+.btn-primario:hover:not(:disabled) { background: var(--cafe-medio); color: #fff; }
+.btn-secundario, a.btn-secundario:link, a.btn-secundario:visited { background: #fff; color: var(--cafe-oscuro); border-color: var(--cafe-oscuro); }
+.btn-secundario:hover:not(:disabled) { background: var(--panel); color: var(--cafe-oscuro); }
+.btn-peligro, a.btn-peligro:link, a.btn-peligro:visited { background: var(--rojo); color: #fff; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Botones dentro de una tabla: centrados en la fila y sin desbordar la celda */
+td .btn { vertical-align: middle; margin: 2px 0; }
 
 label { display: block; font-size: 0.8rem; color: var(--texto-suave); margin-bottom: 4px; }
 /* Todos los campos de texto comparten estilo (antes faltaban email, search, tel...) */
@@ -186,10 +195,12 @@ th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--bor
 th { color: var(--texto-suave); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Semáforo */
-.badge { padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; color: #fff; }
+/* Usar siempre la clase base + el color:  <span class="badge badge-rojo"> */
+.badge { display: inline-block; white-space: nowrap; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; color: #fff; }
 .badge-verde { background: var(--verde); }
 .badge-amarillo { background: var(--amarillo); color: #222; }
 .badge-rojo { background: var(--rojo); }
+.badge-gris, .badge-neutro { background: #eee; color: #555; }
 
 /* ---------- 6. Tarjetas de producto (Caja) ---------- */
 .caja-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }

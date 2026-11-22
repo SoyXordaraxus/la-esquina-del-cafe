@@ -125,6 +125,10 @@
       color: #6b5e55;
       margin: 0;
     }
+    /* Filas separadas como en el diseño de Figma; el botón de Acciones cabe en su celda */
+    .tabla-alertas th { padding: 12px 14px; }
+    .tabla-alertas td { padding: 15px 14px; vertical-align: middle; }
+    .tabla-alertas td:last-child { white-space: nowrap; }
     .texto-tenue { color: #7c6f66; }
     .texto-rojo { color: #b91c1c; font-weight: 500; }
     .texto-amarillo { color: #b45309; font-weight: 500; }
@@ -211,7 +215,7 @@
             <p>Seguimiento de insumos y lotes del turno</p>
           </div>
 
-          <table>
+          <table class="tabla-alertas">
             <thead>
               <tr>
                 <th>Insumo</th>

@@ -120,7 +120,7 @@ function renderizarInsumos() {
       <td>${escaparHtml(i.unidad_medida)}</td>
       <td>1 ${escaparHtml(i.unidad_compra)} = ${i.factor_conversion} ${escaparHtml(i.unidad_medida)}</td>
       <td>${i.minimo_reposicion} ${escaparHtml(i.unidad_medida)}</td>
-      <td>${i.estado === "Activo" ? '<span class="badge-verde">Activo</span>' : '<span class="badge-rojo">Inactivo</span>'}</td>
+      <td>${i.estado === "Activo" ? '<span class="badge badge-verde">Activo</span>' : '<span class="badge badge-rojo">Inactivo</span>'}</td>
       <td style="white-space:nowrap;">
         <button type="button" class="btn btn-secundario" onclick="abrirModalEditar(${i.id_insumo})">Editar</button>
         <button type="button" class="btn btn-peligro" onclick="confirmarEliminarInsumo(${i.id_insumo})">Eliminar</button>
