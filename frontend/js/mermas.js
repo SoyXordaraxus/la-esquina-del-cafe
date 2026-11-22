@@ -1,4 +1,4 @@
-const API_ALMACEN = "http://127.0.0.1:8000/api/almacen";
+const API_ALMACEN = `${API_BASE}/api/almacen`;
 let lotesDisponibles = [];
 let payloadPendiente = null;
 

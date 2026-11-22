@@ -1,4 +1,4 @@
-const API_BKP = "http://127.0.0.1:8000/api/admin/respaldos";
+const API_BKP = `${API_BASE}/api/admin/respaldos`;
 
 async function cargarRespaldos() {
   const resp = await fetch(API_BKP);

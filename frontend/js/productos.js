@@ -1,4 +1,4 @@
-const API_CATALOGOS = "http://127.0.0.1:8000/api/catalogos";
+const API_CATALOGOS = `${API_BASE}/api/catalogos`;
 let listaProductos = [];
 let insumosActivos = [];
 

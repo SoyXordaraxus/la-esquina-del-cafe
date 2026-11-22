@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from sqlalchemy import func
@@ -10,6 +11,7 @@ from database import SessionLocal
 from models import Usuario
 from routes import auth_tableros, ventas, almacen, catalogos, reportes_admin
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 logger = logging.getLogger("esquina")
 
 app = FastAPI(title="La Esquina del Café - API")
@@ -51,7 +53,13 @@ def respaldo_al_cerrar():
         db.close()
 
 
-# Servir frontend estático desde http://127.0.0.1:8000/login.html (Fig. 6)
+@app.get("/", include_in_schema=False)
+def raiz():
+    return RedirectResponse(url="/login.html")
+
+
+# Servir frontend estático desde http://127.0.0.1:8000/login.html (Fig. 6).
+# Se monta al final: un mount en "/" captura todo lo que no haya atendido un router antes.
 ruta_frontend = Path(__file__).resolve().parent.parent / "frontend"
 if ruta_frontend.exists():
     app.mount("/", StaticFiles(directory=str(ruta_frontend), html=True), name="frontend")

@@ -1,4 +1,4 @@
-const API_INSUMOS = "http://127.0.0.1:8000/api/catalogos/insumos";
+const API_INSUMOS = `${API_BASE}/api/catalogos/insumos`;
 let listaInsumos = [];
 
 function actualizarPreviewConversion() {

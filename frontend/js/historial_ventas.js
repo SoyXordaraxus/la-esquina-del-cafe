@@ -7,9 +7,7 @@
 //   POST /api/ventas/{id}/cancelar   { id_usuario, motivo }
 // =========================================================
 
-const API_VENTAS = window.location.hostname.includes("github.dev")
-  ? `${window.location.origin.replace(/-\d+\./, "-8000.")}/api/ventas`
-  : "http://localhost:8000/api/ventas";
+const API_VENTAS = `${API_BASE}/api/ventas`;
 
 let ventaPorCancelar = null;   // { id_venta, total }
 let cancelacionEnCurso = false;

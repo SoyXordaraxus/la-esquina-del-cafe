@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Arranca backend (8000) y frontend (5500) de La Esquina del Café.
+# Arranca La Esquina del Café: FastAPI (8000) sirve el API y también el frontend.
 # Uso:
 #   ./iniciar.sh               SQLite (backend/esquina.db); la crea si no existe
 #   ./iniciar.sh reset         SQLite: borra la base, la vuelve a poblar y arranca
 #   ./iniciar.sh mysql         MySQL 8 en Docker (contenedor mysql-cafe); lo crea/enciende si hace falta
 #   ./iniciar.sh mysql reset   MySQL: borra la base, la vuelve a poblar y arranca
-# Ctrl+C apaga los dos servidores (MySQL se queda encendido).
+# Ctrl+C apaga el servidor (MySQL se queda encendido).
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND="$RAIZ/backend"
-FRONTEND="$RAIZ/frontend"
 PUERTO="${PUERTO:-8000}"
-PUERTO_WEB="${PUERTO_WEB:-5500}"
 DB_FILE="$BACKEND/esquina.db"
 
 # Datos del contenedor MySQL
@@ -123,43 +121,22 @@ else
     DESCRIPCION_BD="SQLite (backend/esquina.db)"
 fi
 
-# ---------- Frontend (servidor estático en segundo plano) ----------
-if "$PY" -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1',$PUERTO_WEB))==0 else 1)"; then
-    echo ">> El puerto $PUERTO_WEB ya está en uso: se asume que el frontend ya está encendido."
-    PID_WEB=""
-else
-    "$PY" -m http.server "$PUERTO_WEB" --directory "$FRONTEND" >/dev/null 2>&1 &
-    PID_WEB=$!
-fi
-
-# Al salir (Ctrl+C o error) se apaga también el frontend
-apagar() {
-    if [ -n "${PID_WEB:-}" ]; then kill "$PID_WEB" 2>/dev/null || true; fi
-}
-trap apagar EXIT INT TERM
-
-# ---------- Codespaces: puerto 8000 público y direcciones listas ----------
+# ---------- Direcciones (en Codespaces se usa el puerto reenviado) ----------
 if [ -n "${CODESPACE_NAME:-}" ]; then
     DOMINIO="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
-    URL_WEB="https://$CODESPACE_NAME-$PUERTO_WEB.$DOMINIO"
-    URL_API="https://$CODESPACE_NAME-$PUERTO.$DOMINIO"
-    # Se intenta en segundo plano porque el puerto debe estar abierto primero
-    ( sleep 4; gh codespace ports visibility "$PUERTO:public" -c "$CODESPACE_NAME" >/dev/null 2>&1 \
-        || echo ">> No se pudo poner el puerto $PUERTO en Public: hazlo a mano en la pestaña Puertos." ) &
+    URL_BASE="https://$CODESPACE_NAME-$PUERTO.$DOMINIO"
 else
-    URL_WEB="http://localhost:$PUERTO_WEB"
-    URL_API="http://localhost:$PUERTO"
+    URL_BASE="http://127.0.0.1:$PUERTO"
 fi
 
 echo ""
 echo "=============================================================="
 echo "  Base de datos: $DESCRIPCION_BD"
-echo "  Caja:    $URL_WEB/caja.html"
-echo "  Ventas:  $URL_WEB/ventas.html"
-echo "  API:     $URL_API/docs"
-echo "  Ctrl+C para apagar todo"
+echo "  Abrir:   $URL_BASE/login.html"
+echo "  API:     $URL_BASE/docs"
+echo "  Ctrl+C para apagar"
 echo "=============================================================="
 echo ""
 
 # ---------- Backend (primer plano) ----------
-"$PY" -m uvicorn main:app --host 0.0.0.0 --port "$PUERTO" --reload
+exec "$PY" -m uvicorn main:app --host 0.0.0.0 --port "$PUERTO" --reload

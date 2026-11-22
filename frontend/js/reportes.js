@@ -1,4 +1,4 @@
-const API_ADMIN = "http://127.0.0.1:8000/api/admin";
+const API_ADMIN = `${API_BASE}/api/admin`;
 let tipoSeleccionado = "ventas";
 
 async function cargarReporte() {

@@ -3,9 +3,7 @@
 // Autor: Francisco
 // =========================================================
 
-const API_URL = window.location.hostname.includes("github.dev")
-  ? `${window.location.origin.replace(/-\d+\./, "-8000.")}/api/ventas`
-  : "http://localhost:8000/api/ventas";
+const API_URL = `${API_BASE}/api/ventas`;
 
 // Catálogo local de respaldo (se usa si el backend aún no está encendido)
 const CATALOGO_RESPALDO = [
