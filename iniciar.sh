@@ -40,7 +40,7 @@ else
 fi
 
 # Verificar dependencias mínimas
-if ! "$PY" -c "import fastapi, uvicorn, sqlalchemy" 2>/dev/null; then
+if ! "$PY" -c "import fastapi, uvicorn, sqlalchemy, fpdf" 2>/dev/null; then
     echo ">> Faltan dependencias. Instala con:"
     echo "   $PY -m pip install -r \"$RAIZ/requirements.txt\""
     exit 1
