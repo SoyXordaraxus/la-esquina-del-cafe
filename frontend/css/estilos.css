@@ -172,6 +172,14 @@ a.btn:hover, a.btn:focus, a.btn:active { text-decoration: none; }
 
 /* Botones dentro de una tabla: centrados en la fila y sin desbordar la celda */
 td .btn { vertical-align: middle; margin: 2px 0; }
+/* Columna de Acciones con varios botones (Editar · Desactivar/Activar · Eliminar) */
+td.acciones-fila { white-space: nowrap; }
+td.acciones-fila .btn { padding: 8px 14px; font-size: 0.85rem; }
+td.acciones-fila > * + * { margin-left: 6px; }
+/* Botón deshabilitado con motivo: el <span> recibe el cursor para que el tooltip
+   (title) se vea en todos los navegadores, aunque el botón esté disabled */
+.btn-con-motivo { display: inline-block; cursor: not-allowed; }
+.btn-con-motivo .btn:disabled { pointer-events: none; }
 
 label { display: block; font-size: 0.8rem; color: var(--texto-suave); margin-bottom: 4px; }
 /* Todos los campos de texto comparten estilo (antes faltaban email, search, tel...) */

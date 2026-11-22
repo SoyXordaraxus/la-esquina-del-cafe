@@ -33,7 +33,6 @@ function abrirModalNuevo() {
   document.getElementById("insumo-u-base").value = "g";
   document.getElementById("insumo-u-compra").value = "kg";
   document.getElementById("insumo-factor").value = 1000;
-  document.getElementById("grupo-estado-insumo").style.display = "none";
   document.getElementById("error-modal-insumo").style.display = "none";
   actualizarPreviewConversion();
   abrirModal("modal-insumo");
@@ -52,46 +51,81 @@ function abrirModalEditar(id) {
   document.getElementById("insumo-u-base").value = ins.unidad_medida;
   document.getElementById("insumo-u-compra").value = ins.unidad_compra;
   document.getElementById("insumo-factor").value = ins.factor_conversion;
-  document.getElementById("insumo-estado").value = ins.estado;
-  document.getElementById("grupo-estado-insumo").style.display = "";
   document.getElementById("error-modal-insumo").style.display = "none";
   actualizarPreviewConversion();
   abrirModal("modal-insumo");
 }
 
-function confirmarEliminarInsumo(id) {
+function mostrarMensajeInsumos(texto, esError = false) {
+  const msg = document.getElementById("msg-insumos");
+  msg.className = esError ? "alerta-error" : "badge-verde";
+  msg.style.display = "block";
+  msg.style.padding = "12px 16px";
+  msg.style.borderRadius = "10px";
+  msg.textContent = texto;
+}
+
+// PATCH/DELETE con el mensaje del backend (409 explica qué productos o historial lo impiden)
+async function enviarAccionInsumo(url, opciones, respaldo) {
+  try {
+    const resp = await fetch(url, opciones);
+    const data = await leerJsonSeguro(resp);
+    if (!resp.ok) throw new Error(mensajeError(data, respaldo, resp.status));
+    mostrarMensajeInsumos(data.mensaje);
+  } catch (err) {
+    mostrarMensajeInsumos(mensajeExcepcion(err, respaldo), true);
+  }
+  await cargarInsumos();
+}
+
+function cambiarEstadoInsumo(id, estado) {
+  return enviarAccionInsumo(`${API_INSUMOS}/${id}/estado`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estado }),
+  }, "No se pudo cambiar el estado del insumo.");
+}
+
+// Desactivar pide confirmación (RF 14); Activar se aplica directo
+function confirmarDesactivarInsumo(id) {
   const ins = listaInsumos.find(i => i.id_insumo === id);
   if (!ins) return;
+  const usados = ins.usado_en_productos_activos || [];
+  const nota = usados.length
+    ? `Se usa en productos activos (${usados.join(", ")}): primero desactiva o cambia esas recetas.`
+    : "Dejará de aparecer en Recepción y al armar recetas; su historial y reportes se conservan.";
+  mostrarConfirmacion({
+    titulo: `¿Desactivar «${ins.nombre}»?`,
+    mensaje: `${nota} ¿Deseas continuar?`,
+    textoConfirmar: "Sí, desactivar",
+    onConfirmar: () => cambiarEstadoInsumo(id, "Inactivo"),
+  });
+}
 
-  const nota = ins.en_uso
-    ? "Tiene lotes registrados, por lo que pasará a estado Inactivo conservando su historial."
-    : "No está asociado a ninguna receta ni lote, por lo que se eliminará del catálogo.";
-
+function confirmarEliminarInsumo(id) {
+  const ins = listaInsumos.find(i => i.id_insumo === id);
+  if (!ins || !ins.puede_eliminar) return;
   mostrarConfirmacion({
     titulo: `¿Eliminar «${ins.nombre}»?`,
-    mensaje: `${nota} ¿Deseas continuar?`,
+    mensaje: "No tiene recetas, lotes ni movimientos, así que se borrará del catálogo de forma permanente. ¿Deseas continuar?",
     textoConfirmar: "Sí, eliminar insumo",
-    onConfirmar: async () => {
-      const msg = document.getElementById("msg-insumos");
-      try {
-        const u = obtenerUsuario();
-        const resp = await fetch(`${API_INSUMOS}/${id}?id_usuario=${u.id_usuario || 1}`, { method: "DELETE" });
-        const data = await leerJsonSeguro(resp);
-        if (!resp.ok) throw new Error(mensajeError(data, "No se pudo eliminar.", resp.status));
-
-        msg.className = "badge-verde";
-        msg.style.display = "block";
-        msg.style.padding = "12px 16px";
-        msg.style.borderRadius = "10px";
-        msg.textContent = data.mensaje;
-        await cargarInsumos();
-      } catch (err) {
-        msg.className = "alerta-error";
-        msg.style.display = "block";
-        msg.textContent = mensajeExcepcion(err);
-      }
-    },
+    onConfirmar: () => enviarAccionInsumo(`${API_INSUMOS}/${id}`, { method: "DELETE" }, "No se pudo eliminar el insumo."),
   });
+}
+
+function botonesInsumo(i) {
+  const activo = i.estado === "Activo";
+  const estado = activo
+    ? `<button type="button" class="btn btn-secundario" onclick="confirmarDesactivarInsumo(${i.id_insumo})">Desactivar</button>`
+    : `<button type="button" class="btn btn-secundario" onclick="cambiarEstadoInsumo(${i.id_insumo}, 'Activo')">Activar</button>`;
+  const motivo = escaparHtml(i.motivo_no_eliminar || "Tiene historial: usa Desactivar");
+  const eliminar = i.puede_eliminar
+    ? `<button type="button" class="btn btn-peligro" onclick="confirmarEliminarInsumo(${i.id_insumo})">Eliminar</button>`
+    : `<span class="btn-con-motivo" title="${motivo}"><button type="button" class="btn btn-peligro" disabled aria-disabled="true" title="${motivo}">Eliminar</button></span>`;
+  return `
+        <button type="button" class="btn btn-secundario" onclick="abrirModalEditar(${i.id_insumo})">Editar</button>
+        ${estado}
+        ${eliminar}`;
 }
 
 function renderizarInsumos() {
@@ -121,9 +155,7 @@ function renderizarInsumos() {
       <td>1 ${escaparHtml(i.unidad_compra)} = ${i.factor_conversion} ${escaparHtml(i.unidad_medida)}</td>
       <td>${i.minimo_reposicion} ${escaparHtml(i.unidad_medida)}</td>
       <td>${i.estado === "Activo" ? '<span class="badge badge-verde">Activo</span>' : '<span class="badge badge-rojo">Inactivo</span>'}</td>
-      <td style="white-space:nowrap;">
-        <button type="button" class="btn btn-secundario" onclick="abrirModalEditar(${i.id_insumo})">Editar</button>
-        <button type="button" class="btn btn-peligro" onclick="confirmarEliminarInsumo(${i.id_insumo})">Eliminar</button>
+      <td class="acciones-fila">${botonesInsumo(i)}
       </td>
     </tr>
   `).join("");
@@ -166,7 +198,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     errBox.style.display = "none";
 
     const id = document.getElementById("insumo-id").value;
-    const u = obtenerUsuario();
     const payload = {
       nombre: document.getElementById("insumo-nombre").value.trim(),
       categoria: document.getElementById("insumo-categoria").value,
@@ -175,8 +206,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       factor_conversion: parseFloat(document.getElementById("insumo-factor").value),
       es_perecedero: document.getElementById("insumo-perecedero").value === "true",
       minimo_reposicion: parseFloat(document.getElementById("insumo-minimo").value),
-      estado: document.getElementById("insumo-estado").value || "Activo",
-      id_usuario: u.id_usuario || 1,
     };
 
     try {
@@ -191,12 +220,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!resp.ok) throw new Error(mensajeError(data, "No se pudo guardar el insumo.", resp.status));
 
       cerrarModal("modal-insumo");
-      const msg = document.getElementById("msg-insumos");
-      msg.className = "badge-verde";
-      msg.style.display = "block";
-      msg.style.padding = "12px 16px";
-      msg.style.borderRadius = "10px";
-      msg.textContent = data.mensaje;
+      mostrarMensajeInsumos(data.mensaje);
       await cargarInsumos();
     } catch (err) {
       errBox.textContent = mensajeExcepcion(err);

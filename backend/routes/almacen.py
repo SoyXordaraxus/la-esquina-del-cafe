@@ -198,6 +198,11 @@ def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_d
     insumo = db.query(Insumo).filter(Insumo.id_insumo == datos.id_insumo).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="El insumo seleccionado no existe.")
+    if (insumo.estado or "Activo").strip().lower() != "activo":
+        raise HTTPException(
+            status_code=409,
+            detail=f"El insumo «{insumo.nombre}» está inactivo. Actívalo en Insumos para poder recibir lotes.",
+        )
 
     if datos.cantidad_ingresada <= 0:
         raise HTTPException(status_code=400, detail="La cantidad recibida debe ser mayor a 0.")
