@@ -9,6 +9,7 @@ from models import Usuario, Insumo, LoteInsumo, Venta, Merma
 from services.bitacora import registrar_bitacora
 from services.contrasenas import hashear, necesita_rehash, verificar
 from services.sesion import crear_token, requiere_admin, rol_normalizado
+from services.tiempo import NOMBRE_ZONA, hoy_local, rango_utc
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 
@@ -61,6 +62,7 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         "correo": usuario.correo,
         "rol": rol_norm,
         "token": crear_token(usuario),
+        "zona_horaria": NOMBRE_ZONA,        # config.js la usa para mostrar fechas
     }
 
 
@@ -69,20 +71,22 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
 # ==========================================
 @router.get("/dashboard/resumen", dependencies=[Depends(requiere_admin)])
 def obtener_resumen_dia(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()
     limite_caducidad = hoy + timedelta(days=5)  # RF 6.1: alertas hasta 5 días
 
+    # Día y mes de calendario del negocio, convertidos a UTC para comparar
+    inicio_dia, fin_dia = rango_utc(hoy)
     ventas_hoy = db.query(Venta).filter(
-        func.date(Venta.fecha_emision_ticket) == hoy,
+        Venta.fecha_emision_ticket >= inicio_dia,
+        Venta.fecha_emision_ticket < fin_dia,
         func.lower(Venta.estado) == "completada"
     ).all()
-    if not ventas_hoy:
-        ventas_hoy = db.query(Venta).filter(func.lower(Venta.estado) == "completada").all()
 
     ventas_dia = sum(float(v.total) for v in ventas_hoy)
     tickets_dia = len(ventas_hoy)
 
-    mermas = db.query(Merma).all()
+    inicio_mes, fin_mes = rango_utc(hoy.replace(day=1), hoy)
+    mermas = db.query(Merma).filter(Merma.fecha >= inicio_mes, Merma.fecha < fin_mes).all()
     registros_mermas = len(mermas)
     mermas_mes = sum(float(m.costo_perdida) for m in mermas)
 
@@ -204,7 +208,7 @@ def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float)
 
 @router.get("/inventario/semaforo", dependencies=[Depends(requiere_admin)])
 def obtener_inventario_semaforo(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()
     insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
 
     resultado = []

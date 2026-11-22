@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from database import get_db, engine
 from services.contrasenas import hashear
 from services.sesion import requiere_admin
+from services.tiempo import ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
 from models import (
     Usuario,
     Insumo,
@@ -137,19 +138,19 @@ def generar_pdf_tabla(titulo: str, subtitulo: str, columnas: list, filas: list) 
 # 1. REPORTES EXPORTABLES (RF 12)
 # =========================================================
 def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db: Session) -> dict:
-    inicio_dt = datetime.combine(fecha_inicio, datetime.min.time())
-    fin_dt = datetime.combine(fecha_fin, datetime.max.time())
+    # Días de calendario del negocio -> rango UTC semiabierto [inicio_dt, fin_dt)
+    inicio_dt, fin_dt = rango_utc(fecha_inicio, fecha_fin)
 
     if tipo == "ventas":
         ventas = (
             db.query(Venta)
-            .filter(Venta.fecha_emision_ticket.between(inicio_dt, fin_dt))
+            .filter(Venta.fecha_emision_ticket >= inicio_dt, Venta.fecha_emision_ticket < fin_dt)
             .order_by(Venta.fecha_emision_ticket.asc())
             .all()
         )
         por_dia = {}
         for v in ventas:
-            dia_str = v.fecha_emision_ticket.strftime("%Y-%m-%d")
+            dia_str = formato_local(v.fecha_emision_ticket, "%Y-%m-%d")
             if dia_str not in por_dia:
                 por_dia[dia_str] = {"completadas": 0, "brutas": 0.0, "cancelaciones": 0.0}
             monto = float(v.total)
@@ -192,7 +193,8 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
             db.query(MovimientoInventario)
             .filter(
                 MovimientoInventario.tipo_movimiento == "SALIDA_VENTA",
-                MovimientoInventario.fecha_movimiento.between(inicio_dt, fin_dt),
+                MovimientoInventario.fecha_movimiento >= inicio_dt,
+                MovimientoInventario.fecha_movimiento < fin_dt,
             )
             .all()
         )
@@ -219,7 +221,7 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
     elif tipo == "mermas":
         mermas = (
             db.query(Merma)
-            .filter(Merma.fecha.between(inicio_dt, fin_dt))
+            .filter(Merma.fecha >= inicio_dt, Merma.fecha < fin_dt)
             .order_by(Merma.fecha.desc())
             .all()
         )
@@ -230,7 +232,7 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
             costo = float(m.costo_perdida)
             total_perdida += costo
             filas.append([
-                m.fecha.strftime("%Y-%m-%d %H:%M") if m.fecha else "",
+                formato_local(m.fecha, "%Y-%m-%d %H:%M"),
                 ins.nombre if ins else f"Insumo #{m.id_insumo}",
                 f"{float(m.cantidad):g} {ins.unidad_medida if ins else ''}",
                 m.motivo,
@@ -253,7 +255,7 @@ def consultar_reporte(
     fecha_fin: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    hoy = date.today()
+    hoy = hoy_local()
     f_fin = fecha_fin or hoy
     f_ini = fecha_inicio or (f_fin - timedelta(days=30))
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
@@ -271,7 +273,7 @@ def exportar_reporte(
     admin: Usuario = Depends(requiere_admin),
 ):
     id_usuario = admin.id_usuario
-    hoy = date.today()
+    hoy = hoy_local()
     f_fin = fecha_fin or hoy
     f_ini = fecha_inicio or (f_fin - timedelta(days=30))
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
@@ -339,7 +341,7 @@ def listar_usuarios(db: Session = Depends(get_db)):
                 "correo": u.correo,
                 "rol": "Administrador" if "admin" in (u.rol or "").lower() else "Cajero",
                 "estado": u.estado or "Activo",
-                "fecha_registro": u.fecha_registro.strftime("%Y-%m-%d") if u.fecha_registro else "—",
+                "fecha_registro": formato_local(u.fecha_registro, "%Y-%m-%d", "—"),
             }
             for u in usuarios
         ]
@@ -443,9 +445,9 @@ def consultar_bitacora(
     if id_usuario:
         consulta = consulta.filter(Bitacora.id_usuario == id_usuario)
     if fecha_inicio:
-        consulta = consulta.filter(Bitacora.fecha_hora >= datetime.combine(fecha_inicio, datetime.min.time()))
+        consulta = consulta.filter(Bitacora.fecha_hora >= rango_utc(fecha_inicio)[0])
     if fecha_fin:
-        consulta = consulta.filter(Bitacora.fecha_hora <= datetime.combine(fecha_fin, datetime.max.time()))
+        consulta = consulta.filter(Bitacora.fecha_hora < rango_utc(fecha_fin)[1])
 
     registros = consulta.limit(min(max(limite, 1), 500)).all()
     salida = []
@@ -453,8 +455,8 @@ def consultar_bitacora(
         usr = db.query(Usuario).filter(Usuario.id_usuario == b.id_usuario).first()
         salida.append({
             "id_bitacora": b.id_bitacora,
-            "fecha": b.fecha_hora.strftime("%d %b %Y") if b.fecha_hora else "—",
-            "hora": b.fecha_hora.strftime("%H:%M:%S") if b.fecha_hora else "—",
+            "fecha": formato_local(b.fecha_hora, "%d %b %Y", "—"),
+            "hora": formato_local(b.fecha_hora, "%H:%M:%S", "—"),
             "usuario": usr.nombre_usuario if usr else f"Usuario #{b.id_usuario}",
             "rol": usr.rol if usr else "—",
             "accion": b.accion,
@@ -480,7 +482,7 @@ def listar_respaldos():
     lista = []
     for idx, f in enumerate(archivos, start=1):
         stat = f.stat()
-        dt = datetime.fromtimestamp(stat.st_mtime)
+        dt = datetime.fromtimestamp(stat.st_mtime, ZONA_NEGOCIO)
         tam_kb = round(stat.st_size / 1024, 1)
         lista.append({
             "archivo": f.name,
@@ -542,7 +544,7 @@ def _volcado_sqlite() -> list:
 def generar_respaldo(db: Session, tipo: str, id_usuario: int) -> dict:
     """RF 21: escribe backups/respaldo_<tipo>_<fecha>.sql. Funciona con MySQL y SQLite."""
     CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
-    ahora = datetime.now()
+    ahora = ahora_local()
     nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
     ruta = CARPETA_BACKUPS / nombre
 

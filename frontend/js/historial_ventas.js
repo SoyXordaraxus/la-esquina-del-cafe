@@ -30,9 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ---------- Utilidades ---------- */
+// "Hoy" es el día del negocio (config.js), no el del navegador
 function hoyISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return hoyNegocioISO();
 }
 
 function dinero(n) {
@@ -41,8 +41,7 @@ function dinero(n) {
 
 function fechaLegible(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  return fechaHoraNegocio(iso);
 }
 
 function esAdministrador() {

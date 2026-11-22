@@ -5,7 +5,6 @@
 const MOSTRAR_SELECTOR_ROL = false;
 const PAGINA_LOGIN = "login.html";
 
-const BADGES_INICIALES = { "caducidades.html": 4 };
 
 /* ---------- Iconos (SVG de línea, sin librerías) ---------- */
 const ICONOS = {
@@ -77,9 +76,11 @@ function actualizarReloj() {
   const el = document.getElementById("top-fecha");
   if (!el) return;
   const ahora = new Date();
-  const dia = ahora.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const hora = ahora.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
-  el.innerHTML = `${dia.charAt(0).toUpperCase() + dia.slice(1)}<br><strong>${hora} h · Ciudad de México</strong>`;
+  const zona = zonaNegocio();
+  const dia = ahora.toLocaleDateString("es-MX", { timeZone: zona, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const hora = ahora.toLocaleTimeString("es-MX", { timeZone: zona, hour: "2-digit", minute: "2-digit", hour12: false });
+  const lugar = zona === "America/Mexico_City" ? "Ciudad de México" : zona;
+  el.innerHTML = `${dia.charAt(0).toUpperCase() + dia.slice(1)}<br><strong>${hora} h · ${escaparHtml(lugar)}</strong>`;
 }
 
 /* ---------- Modales: funciones globales ---------- */
@@ -231,7 +232,7 @@ function construirLayout() {
       </ul>
     </nav>`;
 
-  Object.entries(BADGES_INICIALES).forEach(([archivo, n]) => ponerBadge(archivo, n));
+  cargarBadgeCaducidades();
 
   insertarModalConfirmacion();
 }
@@ -240,8 +241,20 @@ function ponerBadge(archivo, numero) {
   const enlace = document.querySelector(`.sidebar-menu a[data-archivo="${archivo}"]`);
   if (!enlace) return;
   let b = enlace.querySelector(".menu-badge");
+  if (!numero) { if (b) b.remove(); return; }   // sin alertas no se muestra el globo
   if (!b) { b = document.createElement("span"); b.className = "menu-badge"; enlace.appendChild(b); }
   b.textContent = numero;
+}
+
+// Número real de lotes caducados o por vencer (<= 5 días). Solo el Administrador ve el menú.
+async function cargarBadgeCaducidades() {
+  if (!document.querySelector('.sidebar-menu a[data-archivo="caducidades.html"]')) return;
+  try {
+    const resp = await fetch(`${API_BASE}/api/almacen/caducidades/resumen`);
+    if (!resp.ok) return;
+    const datos = await resp.json();
+    ponerBadge("caducidades.html", datos.alertas);
+  } catch (e) { /* sin conexión: sin globo */ }
 }
 
 /* ---------- Protección por rol (antes de que la página haga peticiones) ---------- */

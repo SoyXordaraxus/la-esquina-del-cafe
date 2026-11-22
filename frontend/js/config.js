@@ -62,3 +62,35 @@ function conToken(url) {
     return resp;
   };
 })();
+
+/* ---------- Zona horaria del negocio ----------
+   La define el backend (TZ_NEGOCIO) y llega en la respuesta del login.
+   Todo lo de calendario ("hoy", fechas mostradas) se calcula en esa zona,
+   no en la del navegador ni en la del servidor (UTC). */
+const ZONA_POR_OMISION = "America/Mexico_City";
+
+function zonaNegocio() {
+  const s = leerSesion();
+  return (s && s.zona_horaria) || ZONA_POR_OMISION;
+}
+
+// "AAAA-MM-DD" de hoy en el negocio; desplazamientoDias = -7 -> hace una semana
+function hoyNegocioISO(desplazamientoDias = 0) {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zonaNegocio(), year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const v = Object.fromEntries(partes.map(p => [p.type, p.value]));
+  const d = new Date(Date.UTC(+v.year, +v.month - 1, +v.day + desplazamientoDias));
+  return d.toISOString().slice(0, 10);
+}
+
+// ISO del API (con desfase, p. ej. 2026-11-21T23:30:00-06:00) -> "21/11/2026, 23:30"
+function fechaHoraNegocio(iso, opciones = {}) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  return d.toLocaleString("es-MX", {
+    timeZone: zonaNegocio(), day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: false, ...opciones,
+  });
+}

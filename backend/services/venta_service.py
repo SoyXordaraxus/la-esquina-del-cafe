@@ -19,6 +19,7 @@ from models import (
     Venta,
 )
 from services.bitacora import registrar_bitacora
+from services.tiempo import ahora_utc, hoy_local, iso_local, rango_utc
 
 FORMA_EFECTIVO = "Efectivo"
 FORMA_TARJETA = "Tarjeta externa"
@@ -132,7 +133,7 @@ def _stock_vigente_por_insumo(db: Session, hoy: date) -> dict:
 
 
 def listar_productos_disponibles(db: Session) -> list:
-    hoy = date.today()
+    hoy = hoy_local()
     productos = db.scalars(
         select(Producto).where(func.lower(Producto.estado) == "activo").order_by(Producto.nombre)
     ).all()
@@ -173,7 +174,7 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
     if not pedido:
         raise DatosInvalidos("La comanda está vacía.")
 
-    hoy = date.today()
+    hoy = hoy_local()
 
     try:
         # 1. Productos y total desde BD
@@ -245,7 +246,7 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
             raise StockInsuficiente(faltantes)
 
         # 5. Guardar Venta, Detalles, consumo PEPS y Movimientos (una sola transacción)
-        ahora = datetime.now()
+        ahora = ahora_utc()
         venta = Venta(
             id_usuario=id_usuario,
             total=total,
@@ -325,7 +326,7 @@ def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibid
 
         return {
             "id_venta": venta.id_venta,
-            "fecha": ahora.isoformat(timespec="seconds"),
+            "fecha": iso_local(ahora),
             "forma_pago": forma,
             "total": float(total),
             "monto_recibido": float(monto),
@@ -391,7 +392,7 @@ def _venta_a_dict(db: Session, venta: Venta, con_insumos: bool) -> dict:
     usuario = db.get(Usuario, venta.id_usuario)
     datos = {
         "id_venta": venta.id_venta,
-        "fecha": venta.fecha_emision_ticket.isoformat(timespec="seconds") if venta.fecha_emision_ticket else None,
+        "fecha": iso_local(venta.fecha_emision_ticket),   # hora del negocio con desfase
         "usuario": usuario.nombre_usuario if usuario else str(venta.id_usuario),
         "forma_pago": venta.forma_pago,
         "total": float(venta.total),
@@ -420,9 +421,9 @@ def _venta_a_dict(db: Session, venta: Venta, con_insumos: bool) -> dict:
 def listar_ventas(db: Session, fecha: date = None, limite: int = 100) -> list:
     consulta = select(Venta).order_by(Venta.id_venta.desc()).limit(limite)
     if fecha is not None:
-        inicio = datetime.combine(fecha, datetime.min.time())
-        fin = datetime.combine(fecha, datetime.max.time())
-        consulta = consulta.where(Venta.fecha_emision_ticket.between(inicio, fin))
+        # 'fecha' es un día de calendario del negocio; se compara su rango en UTC
+        inicio, fin = rango_utc(fecha)
+        consulta = consulta.where(Venta.fecha_emision_ticket >= inicio, Venta.fecha_emision_ticket < fin)
     return [_venta_a_dict(db, v, con_insumos=False) for v in db.scalars(consulta)]
 
 
@@ -446,7 +447,7 @@ def cancelar_venta(db: Session, id_venta: int, id_usuario: int, motivo: str) -> 
     if motivo not in MOTIVOS_CANCELACION:
         raise DatosInvalidos("Motivo de cancelación no válido.")
 
-    hoy = date.today()
+    hoy = hoy_local()
     try:
         usuario = db.get(Usuario, id_usuario)
         if (
@@ -462,7 +463,7 @@ def cancelar_venta(db: Session, id_venta: int, id_usuario: int, motivo: str) -> 
         if (venta.estado or "").lower() == ESTADO_CANCELADA:
             raise VentaYaCancelada(f"La venta #{id_venta} ya estaba cancelada.")
 
-        ahora = datetime.now()
+        ahora = ahora_utc()
         restituidos, a_merma = [], []
 
         for id_insumo, id_lote, cantidad, costo_aplicado in _consumos_de_venta(db, id_venta):

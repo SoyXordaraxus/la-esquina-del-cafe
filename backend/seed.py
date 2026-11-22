@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from database import SessionLocal, engine, Base
 from services.contrasenas import hashear
+from services.tiempo import ahora_utc, hoy_local
 from models import Usuario, Proveedor, Insumo, LoteInsumo, Producto, Receta, Venta, Merma, Bitacora
 
 def poblar_base():
@@ -63,7 +64,7 @@ def poblar_base():
         for ins in insumos:
             db.refresh(ins)
 
-        hoy = date.today()
+        hoy = hoy_local()
 
         # 4. Lotes PEPS (cantidades en unidad base; los vencidos quedan 'Caducado')
         lotes = [
@@ -93,7 +94,7 @@ def poblar_base():
         for i in (cafe, leche, jarabe, pan, queso, pastel):
             db.refresh(i)
 
-        ahora = datetime.now()
+        ahora = ahora_utc()
         db.add_all([
             # costo_unitario por unidad de compra: $350/kg de café, $20/L de leche, etc.
             LoteInsumo(id_insumo=cafe.id_insumo,   id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=5000, costo_unitario=350.00, caducidad=hoy + timedelta(days=120), numero_factura="CF-001", estado="Disponible"),

@@ -9,6 +9,7 @@ from database import get_db
 from models import Usuario, Insumo, Proveedor, LoteInsumo, MovimientoInventario, Merma, Bitacora
 from services.contrasenas import verificar
 from services.sesion import usuario_actual
+from services.tiempo import formato_local, hoy_local
 
 router = APIRouter(prefix="/api/almacen", tags=["Almacén"], dependencies=[Depends(usuario_actual)])
 
@@ -105,7 +106,7 @@ def obtener_catalogos_recepcion(db: Session = Depends(get_db)):
 
 @router.get("/lotes")
 def listar_lotes(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()   # "vence hoy / mañana" según el calendario del negocio
     sincronizar_caducidades(db, hoy)
 
     lotes = (
@@ -169,9 +170,26 @@ def listar_lotes(db: Session = Depends(get_db)):
             "estado": estado_lote,
             "semaforo": semaforo,
             "numero_factura": l.numero_factura or "—",
-            "fecha_entrada": l.fecha_entrada.strftime("%Y-%m-%d %H:%M") if l.fecha_entrada else "",
+            "fecha_entrada": formato_local(l.fecha_entrada, "%Y-%m-%d %H:%M"),
         })
     return {"lotes": resultado}
+
+
+@router.get("/caducidades/resumen")
+def resumen_caducidades(db: Session = Depends(get_db)):
+    """Número del badge de Caducidades: lotes caducados o que vencen en <= 5 días."""
+    lotes = listar_lotes(db)["lotes"]
+    alertas = [
+        l for l in lotes
+        if l["estado"] == "Caducado"
+        or (l["estado"] == "Vigente" and l["dias_restantes"] is not None and l["dias_restantes"] <= 5)
+    ]
+    return {
+        "alertas": len(alertas),
+        "caducados": sum(1 for l in alertas if l["estado"] == "Caducado"),
+        "por_vencer": sum(1 for l in alertas if l["estado"] == "Vigente"),
+        "fecha_negocio": str(hoy_local()),
+    }
 
 
 @router.post("/recepcion")
@@ -188,7 +206,7 @@ def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="Este insumo es perecedero y requiere fecha de caducidad.")
 
     # RF 4.1: la fecha de caducidad debe ser >= fecha actual
-    if datos.caducidad and datos.caducidad < date.today():
+    if datos.caducidad and datos.caducidad < hoy_local():
         raise HTTPException(status_code=400, detail="La fecha de caducidad no puede ser anterior a hoy.")
 
     cantidad_convertida = convertir_a_unidad_base(datos.cantidad_ingresada, datos.unidad_compra, insumo)
@@ -252,7 +270,7 @@ def listar_mermas(db: Session = Depends(get_db)):
             "motivo": m.motivo,
             "notas": m.notas or "",
             "responsable": f"{usr.nombre_usuario} ({usr.rol})" if usr else f"Usuario #{m.id_usuario}",
-            "fecha": m.fecha.strftime("%d/%m/%Y %H:%M") if m.fecha else "",
+            "fecha": formato_local(m.fecha, "%d/%m/%Y %H:%M"),
         })
     return {"mermas": resultado}
 

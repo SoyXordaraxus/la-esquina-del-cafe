@@ -46,12 +46,9 @@ function descargarArchivo(formato) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const hoy = new Date();
-  const hace7 = new Date();
-  hace7.setDate(hoy.getDate() - 7);
-
-  document.getElementById("rep-fin").value = hoy.toISOString().split("T")[0];
-  document.getElementById("rep-inicio").value = hace7.toISOString().split("T")[0];
+  // toISOString() da la fecha UTC (de noche ya sería "mañana"): se usa el día del negocio
+  document.getElementById("rep-fin").value = hoyNegocioISO();
+  document.getElementById("rep-inicio").value = hoyNegocioISO(-7);
 
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", async () => {

@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
         correo: datos.correo,
         rol: datos.rol,
         token: datos.token,
+        zona_horaria: datos.zona_horaria,
       };
       localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
 
