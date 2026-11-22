@@ -12,7 +12,8 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import get_db, engine
-from services.sesion import requiere_admin, usuario_actual
+from services.contrasenas import hashear
+from services.sesion import requiere_admin
 from models import (
     Usuario,
     Insumo,
@@ -364,7 +365,7 @@ def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db), admi
     nuevo = Usuario(
         nombre_usuario=nombre,
         correo=correo,
-        contrasena=datos.contrasena,
+        contrasena=hashear(datos.contrasena.strip()),
         rol=rol_valido,
         estado="Activo",
     )
@@ -408,7 +409,7 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
 
     if datos.contrasena and datos.contrasena.strip():
         _validar_password_rf11(datos.contrasena.strip())
-        usr.contrasena = datos.contrasena.strip()
+        usr.contrasena = hashear(datos.contrasena.strip())
 
     estado_anterior = usr.estado
     usr.nombre_usuario = nombre

@@ -7,6 +7,7 @@ from sqlalchemy import func
 from database import get_db
 from models import Usuario, Insumo, LoteInsumo, Venta, Merma
 from services.bitacora import registrar_bitacora
+from services.contrasenas import hashear, necesita_rehash, verificar
 from services.sesion import crear_token, requiere_admin, rol_normalizado
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
@@ -37,7 +38,7 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         .first()
     )
 
-    if not usuario or usuario.contrasena != pass_input:
+    if not usuario or not verificar(pass_input, usuario.contrasena):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
 
     if (usuario.estado or "").lower() != "activo":
@@ -45,6 +46,10 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
 
     # Normalizar rol para el contrato del frontend ("Administrador" | "Cajero")
     rol_norm = rol_normalizado(usuario.rol)
+
+    # Migra contraseñas antiguas en texto plano (o con menos iteraciones) al hash actual
+    if necesita_rehash(usuario.contrasena):
+        usuario.contrasena = hashear(pass_input)
 
     registrar_bitacora(db, usuario.id_usuario, "SESION_INICIADA", f"Inicio de sesión correcto · Rol: {rol_norm}")
     db.commit()

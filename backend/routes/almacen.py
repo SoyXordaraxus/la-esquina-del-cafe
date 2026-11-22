@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from database import get_db
 from models import Usuario, Insumo, Proveedor, LoteInsumo, MovimientoInventario, Merma, Bitacora
+from services.contrasenas import verificar
 from services.sesion import usuario_actual
 
 router = APIRouter(prefix="/api/almacen", tags=["Almacén"], dependencies=[Depends(usuario_actual)])
@@ -286,15 +287,15 @@ def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db), a
                 status_code=403,
                 detail="AUTORIZACION_REQUERIDA: Esta merma supera los $100.00 MXN y requiere contraseña de Administrador.",
             )
-        admin = (
+        administradores = (
             db.query(Usuario)
             .filter(
                 func.lower(Usuario.rol).like("%admin%"),
                 func.lower(Usuario.estado) == "activo",
-                Usuario.contrasena == datos.password_admin.strip(),
             )
-            .first()
+            .all()
         )
+        admin = next((a for a in administradores if verificar(datos.password_admin.strip(), a.contrasena)), None)
         if not admin:
             raise HTTPException(status_code=401, detail="Contraseña de Administrador incorrecta. Operación anulada.")
         id_autorizador = admin.id_usuario

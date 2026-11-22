@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 from database import SessionLocal, engine, Base
+from services.contrasenas import hashear
 from models import Usuario, Proveedor, Insumo, LoteInsumo, Producto, Receta, Venta, Merma, Bitacora
 
 def poblar_base():
@@ -15,14 +16,14 @@ def poblar_base():
         admin = Usuario(
             nombre_usuario="Andres Mosso",
             correo="admin@esquinadelcafe.mx",
-            contrasena="admin123",
+            contrasena=hashear("admin123"),
             rol="Administrador",
             estado="Activo"
         )
         cajero = Usuario(
             nombre_usuario="Osvaldo Vazquez",
             correo="osvaldo@esquinadelcafe.mx",
-            contrasena="cajero123",
+            contrasena=hashear("cajero123"),
             rol="Cajero",
             estado="Activo"
         )
