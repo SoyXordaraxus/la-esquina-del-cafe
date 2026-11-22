@@ -7,9 +7,7 @@
 //   POST /api/ventas/{id}/cancelar   { id_usuario, motivo }
 // =========================================================
 
-const API_VENTAS = window.location.hostname.includes("github.dev")
-  ? `${window.location.origin.replace(/-\d+\./, "-8000.")}/api/ventas`
-  : "http://localhost:8000/api/ventas";
+const API_VENTAS = `${API_BASE}/api/ventas`;
 
 let ventaPorCancelar = null;   // { id_venta, total }
 let cancelacionEnCurso = false;
@@ -32,9 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ---------- Utilidades ---------- */
+// "Hoy" es el día del negocio (config.js), no el del navegador
 function hoyISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return hoyNegocioISO();
 }
 
 function dinero(n) {
@@ -43,22 +41,15 @@ function dinero(n) {
 
 function fechaLegible(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  return fechaHoraNegocio(iso);
 }
 
 function esAdministrador() {
   return obtenerUsuario().rol === "Administrador";
 }
 
-// El login todavía no guarda id_usuario en la sesión.
-// MODO DEV: si no viene, se usa 1 (Andres Mosso, Admin) o 2 (Osvaldo, Cajero) del seed.
-// El backend vuelve a validar el rol, así que un Cajero nunca puede cancelar.
-function idUsuarioActual() {
-  const u = obtenerUsuario();
-  if (u.id_usuario) return u.id_usuario;
-  return u.rol === "Administrador" ? 1 : 2;
-}
+// idUsuarioActual() viene de menu.js (sesión real). El backend vuelve a validar el rol
+// con el token, así que un Cajero nunca puede cancelar.
 
 function mostrarError(idElemento, texto) {
   const el = document.getElementById(idElemento);
@@ -79,11 +70,11 @@ async function cargarVentas(fecha) {
   let ventas;
   try {
     const resp = await fetch(url);
-    if (!resp.ok) throw new Error();
+    if (!resp.ok) throw new Error(mensajeError(await leerJson(resp), "No se pudo consultar el historial.", resp.status));
     ventas = await resp.json();
   } catch (e) {
     cuerpo.innerHTML = `<tr><td colspan="7" class="vacio">Sin datos</td></tr>`;
-    mostrarError("error-ventas", "No se pudo consultar el historial. Verifique que el servidor esté encendido.");
+    mostrarError("error-ventas", mensajeExcepcion(e, "No se pudo consultar el historial."));
     return;
   }
 
@@ -125,9 +116,9 @@ async function verDetalle(idVenta) {
   try {
     const resp = await fetch(`${API_VENTAS}/${idVenta}`);
     v = await leerJson(resp);
-    if (!resp.ok) throw new Error(v.detail);
+    if (!resp.ok) throw new Error(mensajeError(v, "No se pudo consultar la venta.", resp.status));
   } catch (e) {
-    mostrarError("error-ventas", e.message || "No se pudo consultar la venta.");
+    mostrarError("error-ventas", mensajeExcepcion(e, "No se pudo consultar la venta."));
     return;
   }
 
@@ -202,7 +193,7 @@ async function enviarCancelacion(motivo) {
   ventaPorCancelar = null;
 
   if (!resp.ok) {
-    mostrarError("error-ventas", typeof data.detail === "string" ? data.detail : "No se pudo cancelar la venta.");
+    mostrarError("error-ventas", mensajeError(data, "No se pudo cancelar la venta.", resp.status));
     return;
   }
 

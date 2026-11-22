@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta
 from database import SessionLocal, engine, Base
-from models import Usuario, Proveedor, Insumo, LoteInsumo, Producto, Receta, Venta, Merma
+from services.contrasenas import hashear
+from services.tiempo import ahora_utc, hoy_local
+from models import Usuario, Proveedor, Insumo, LoteInsumo, Producto, Receta, Venta, Merma, Bitacora
 
 def poblar_base():
     Base.metadata.create_all(engine)   # crea las tablas si no existen
@@ -15,14 +17,14 @@ def poblar_base():
         admin = Usuario(
             nombre_usuario="Andres Mosso",
             correo="admin@esquinadelcafe.mx",
-            contrasena="admin123",
+            contrasena=hashear("admin123"),
             rol="Administrador",
             estado="Activo"
         )
         cajero = Usuario(
             nombre_usuario="Osvaldo Vazquez",
             correo="osvaldo@esquinadelcafe.mx",
-            contrasena="cajero123",
+            contrasena=hashear("cajero123"),
             rol="Cajero",
             estado="Activo"
         )
@@ -43,61 +45,67 @@ def poblar_base():
         db.refresh(prov)
 
         # 3. Insumos (coinciden con los diseños de Figma de Panel y Semáforo)
+        # Convención del catálogo (RF 2): unidad_medida = unidad base (g, ml, pza);
+        # unidad_compra + factor_conversion = cómo se compra (1 kg = 1000 g).
+        # Las cantidades de lote y el mínimo van en unidad base; costo_unitario va
+        # por unidad de compra (almacen.py calcula costo base = costo / factor).
         insumos = [
-            Insumo(nombre="Arroz a granel", categoria="Abarrotes", unidad_medida="kg", es_perecedero=False, minimo_reposicion=100),
-            Insumo(nombre="Frijol negro a granel", categoria="Abarrotes", unidad_medida="kg", es_perecedero=False, minimo_reposicion=100),
-            Insumo(nombre="Leche entera 1 L", categoria="Lácteos", unidad_medida="unidades", es_perecedero=True, minimo_reposicion=100),
-            Insumo(nombre="Aceite vegetal 1 L", categoria="Abarrotes", unidad_medida="unidades", es_perecedero=False, minimo_reposicion=100),
-            Insumo(nombre="Azúcar a granel", categoria="Abarrotes", unidad_medida="kg", es_perecedero=False, minimo_reposicion=50),
-            Insumo(nombre="Yogur natural 150 g", categoria="Lácteos", unidad_medida="unidades", es_perecedero=True, minimo_reposicion=40),
-            Insumo(nombre="Café en grano 1 kg", categoria="Café", unidad_medida="kg", es_perecedero=True, minimo_reposicion=3),
-            Insumo(nombre="Queso crema", categoria="Lácteos", unidad_medida="kg", es_perecedero=True, minimo_reposicion=2),
+            Insumo(nombre="Arroz a granel", categoria="Abarrotes", unidad_medida="g", unidad_compra="kg", factor_conversion=1000, es_perecedero=False, minimo_reposicion=100000),
+            Insumo(nombre="Frijol negro a granel", categoria="Abarrotes", unidad_medida="g", unidad_compra="kg", factor_conversion=1000, es_perecedero=False, minimo_reposicion=100000),
+            Insumo(nombre="Leche entera 1 L", categoria="Lácteos", unidad_medida="pza", unidad_compra="pza", factor_conversion=1, es_perecedero=True, minimo_reposicion=100),
+            Insumo(nombre="Aceite vegetal 1 L", categoria="Abarrotes", unidad_medida="pza", unidad_compra="pza", factor_conversion=1, es_perecedero=False, minimo_reposicion=100),
+            Insumo(nombre="Azúcar a granel", categoria="Abarrotes", unidad_medida="g", unidad_compra="kg", factor_conversion=1000, es_perecedero=False, minimo_reposicion=50000),
+            Insumo(nombre="Yogur natural 150 g", categoria="Lácteos", unidad_medida="pza", unidad_compra="pza", factor_conversion=1, es_perecedero=True, minimo_reposicion=40),
+            Insumo(nombre="Café en grano 1 kg", categoria="Café", unidad_medida="g", unidad_compra="kg", factor_conversion=1000, es_perecedero=True, minimo_reposicion=3000),
+            Insumo(nombre="Queso crema", categoria="Lácteos", unidad_medida="g", unidad_compra="kg", factor_conversion=1000, es_perecedero=True, minimo_reposicion=2000),
         ]
         db.add_all(insumos)
         db.commit()
         for ins in insumos:
             db.refresh(ins)
 
-        hoy = date.today()
+        hoy = hoy_local()
 
-        # 4. Lotes PEPS (cantidades disponibles y fechas de caducidad)
+        # 4. Lotes PEPS (cantidades en unidad base; los vencidos quedan 'Caducado')
         lotes = [
-            LoteInsumo(id_insumo=insumos[0].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=200, cantidad_disponible=180, costo_unitario=24.00, caducidad=hoy + timedelta(days=180), numero_factura="AB-001"),
-            LoteInsumo(id_insumo=insumos[1].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=150, cantidad_disponible=110, costo_unitario=32.00, caducidad=hoy + timedelta(days=150), numero_factura="AB-002"),
-            LoteInsumo(id_insumo=insumos[2].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=120, cantidad_disponible=100, costo_unitario=22.50, caducidad=hoy - timedelta(days=2), numero_factura="LA-001"),
-            LoteInsumo(id_insumo=insumos[3].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=160, cantidad_disponible=150, costo_unitario=38.00, caducidad=hoy + timedelta(days=200), numero_factura="AB-003"),
-            LoteInsumo(id_insumo=insumos[4].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=80, cantidad_disponible=60, costo_unitario=26.00, caducidad=hoy + timedelta(days=240), numero_factura="AB-004"),
-            LoteInsumo(id_insumo=insumos[5].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=50, cantidad_disponible=24, costo_unitario=14.00, caducidad=hoy - timedelta(days=1), numero_factura="LA-002"),
-            LoteInsumo(id_insumo=insumos[6].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=10, cantidad_disponible=1.5, costo_unitario=210.00, caducidad=hoy + timedelta(days=90), numero_factura="CA-281026"),
-            LoteInsumo(id_insumo=insumos[7].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=5, cantidad_disponible=2.5, costo_unitario=65.00, caducidad=hoy + timedelta(days=4), numero_factura="QC-101126"),
+            LoteInsumo(id_insumo=insumos[0].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=200000, cantidad_disponible=180000, costo_unitario=24.00, caducidad=hoy + timedelta(days=180), numero_factura="AB-001", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[1].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=150000, cantidad_disponible=110000, costo_unitario=32.00, caducidad=hoy + timedelta(days=150), numero_factura="AB-002", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[2].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=120, cantidad_disponible=100, costo_unitario=22.50, caducidad=hoy - timedelta(days=2), numero_factura="LA-001", estado="Caducado"),
+            LoteInsumo(id_insumo=insumos[3].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=160, cantidad_disponible=150, costo_unitario=38.00, caducidad=hoy + timedelta(days=200), numero_factura="AB-003", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[4].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=80000, cantidad_disponible=60000, costo_unitario=26.00, caducidad=hoy + timedelta(days=240), numero_factura="AB-004", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[5].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=50, cantidad_disponible=24, costo_unitario=14.00, caducidad=hoy - timedelta(days=1), numero_factura="LA-002", estado="Caducado"),
+            LoteInsumo(id_insumo=insumos[6].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=10000, cantidad_disponible=1500, costo_unitario=210.00, caducidad=hoy + timedelta(days=90), numero_factura="CA-281026", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[7].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=2500, costo_unitario=65.00, caducidad=hoy + timedelta(days=4), numero_factura="QC-101126", estado="Disponible"),
         ]
         db.add_all(lotes)
         db.commit()
         for l in lotes:
             db.refresh(l)
 
-        # 5. Insumos de cafetería (unidad base g / ml / pza), productos y recetas
-        cafe    = Insumo(nombre="Café molido",        categoria="Café",     unidad_medida="g",   es_perecedero=False, minimo_reposicion=1000)
-        leche   = Insumo(nombre="Leche entera",       categoria="Lácteos",  unidad_medida="ml",  es_perecedero=True,  minimo_reposicion=3000)
-        jarabe  = Insumo(nombre="Jarabe de vainilla", categoria="Abarrotes",unidad_medida="ml",  es_perecedero=False, minimo_reposicion=500)
-        pan     = Insumo(nombre="Pan para panini",    categoria="Panadería",unidad_medida="pza", es_perecedero=True,  minimo_reposicion=10)
-        queso   = Insumo(nombre="Queso para panini",  categoria="Lácteos",  unidad_medida="g",   es_perecedero=True,  minimo_reposicion=500)
-        pastel  = Insumo(nombre="Rebanada de pastel", categoria="Panadería",unidad_medida="pza", es_perecedero=True,  minimo_reposicion=5)
+        # 5. Insumos de cafetería, productos y recetas
+        cafe    = Insumo(nombre="Café molido",        categoria="Café",      unidad_medida="g",   unidad_compra="kg",  factor_conversion=1000, es_perecedero=False, minimo_reposicion=1000)
+        leche   = Insumo(nombre="Leche entera",       categoria="Lácteos",   unidad_medida="ml",  unidad_compra="L",   factor_conversion=1000, es_perecedero=True,  minimo_reposicion=3000)
+        jarabe  = Insumo(nombre="Jarabe de vainilla", categoria="Abarrotes", unidad_medida="ml",  unidad_compra="L",   factor_conversion=1000, es_perecedero=False, minimo_reposicion=500)
+        pan     = Insumo(nombre="Pan para panini",    categoria="Panadería", unidad_medida="pza", unidad_compra="paq", factor_conversion=10,   es_perecedero=True,  minimo_reposicion=10)
+        queso   = Insumo(nombre="Queso para panini",  categoria="Lácteos",   unidad_medida="g",   unidad_compra="kg",  factor_conversion=1000, es_perecedero=True,  minimo_reposicion=500)
+        pastel  = Insumo(nombre="Rebanada de pastel", categoria="Panadería", unidad_medida="pza", unidad_compra="pza", factor_conversion=1,    es_perecedero=True,  minimo_reposicion=5)
         db.add_all([cafe, leche, jarabe, pan, queso, pastel])
         db.commit()
         for i in (cafe, leche, jarabe, pan, queso, pastel):
             db.refresh(i)
 
-        ahora = datetime.now()
+        ahora = ahora_utc()
         db.add_all([
-            LoteInsumo(id_insumo=cafe.id_insumo,   id_proveedor=prov.id_proveedor, cantidad_recibida=5000,  cantidad_disponible=5000,  costo_unitario=0.35, caducidad=hoy + timedelta(days=120), numero_factura="CF-001"),
-            # Dos lotes de leche para ver el PEPS: se gasta primero el más antiguo
-            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=6000,  cantidad_disponible=2000,  costo_unitario=0.02, fecha_entrada=ahora - timedelta(days=3), caducidad=hoy + timedelta(days=3),  numero_factura="LE-001"),
-            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=8000,  cantidad_disponible=8000,  costo_unitario=0.02, fecha_entrada=ahora,                      caducidad=hoy + timedelta(days=10), numero_factura="LE-002"),
-            LoteInsumo(id_insumo=jarabe.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=2000,  cantidad_disponible=2000,  costo_unitario=0.10, caducidad=hoy + timedelta(days=200), numero_factura="JV-001"),
-            LoteInsumo(id_insumo=pan.id_insumo,    id_proveedor=prov.id_proveedor, cantidad_recibida=40,    cantidad_disponible=40,    costo_unitario=6.00, caducidad=hoy + timedelta(days=5),   numero_factura="PN-001"),
-            LoteInsumo(id_insumo=queso.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=2000,  cantidad_disponible=2000,  costo_unitario=0.16, caducidad=hoy + timedelta(days=15),  numero_factura="QP-001"),
-            # Pastel: sin lote disponible a propósito -> aparece "Sin stock" en Caja
+            # costo_unitario por unidad de compra: $350/kg de café, $20/L de leche, etc.
+            LoteInsumo(id_insumo=cafe.id_insumo,   id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=5000, costo_unitario=350.00, caducidad=hoy + timedelta(days=120), numero_factura="CF-001", estado="Disponible"),
+            # Dos lotes de leche para ver el PEPS: se gasta primero el que caduca antes
+            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=6000, cantidad_disponible=2000, costo_unitario=20.00, fecha_entrada=ahora - timedelta(days=3), caducidad=hoy + timedelta(days=3),  numero_factura="LE-001", estado="Disponible"),
+            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=8000, cantidad_disponible=8000, costo_unitario=20.00, fecha_entrada=ahora,                      caducidad=hoy + timedelta(days=10), numero_factura="LE-002", estado="Disponible"),
+            LoteInsumo(id_insumo=jarabe.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=100.00, caducidad=hoy + timedelta(days=200), numero_factura="JV-001", estado="Disponible"),
+            LoteInsumo(id_insumo=pan.id_insumo,    id_proveedor=prov.id_proveedor, cantidad_recibida=40,   cantidad_disponible=40,   costo_unitario=60.00,  caducidad=hoy + timedelta(days=5),   numero_factura="PN-001", estado="Disponible"),
+            LoteInsumo(id_insumo=queso.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=160.00, caducidad=hoy + timedelta(days=15),  numero_factura="QP-001", estado="Disponible"),
+            # Pastel: lote ya agotado a propósito -> aparece "Sin stock" en Caja
+            LoteInsumo(id_insumo=pastel.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=12,   cantidad_disponible=0,    costo_unitario=18.00,  caducidad=hoy + timedelta(days=2),   numero_factura="PS-001", estado="Agotado"),
         ])
         db.commit()
 
@@ -140,10 +148,13 @@ def poblar_base():
 
         # 7. Mermas del mes
         mermas = [
-            Merma(id_insumo=insumos[2].id_insumo, id_lote=lotes[2].id_lote, id_usuario=admin.id_usuario, cantidad=8, motivo="Caducidad en refrigerador"),
-            Merma(id_insumo=insumos[5].id_insumo, id_lote=lotes[5].id_lote, id_usuario=admin.id_usuario, cantidad=10, motivo="Empaque dañado / caducado"),
+            Merma(id_insumo=insumos[2].id_insumo, id_lote=lotes[2].id_lote, id_usuario=admin.id_usuario, autorizado_por=admin.id_usuario,
+                  cantidad=8, costo_perdida=180.00, motivo="Caducidad", notas="Caducidad en refrigerador"),
+            Merma(id_insumo=insumos[5].id_insumo, id_lote=lotes[5].id_lote, id_usuario=admin.id_usuario, autorizado_por=admin.id_usuario,
+                  cantidad=10, costo_perdida=140.00, motivo="Daño en empaque", notas="Empaque dañado / caducado"),
         ]
         db.add_all(mermas)
+        db.add(Bitacora(id_usuario=admin.id_usuario, accion="SISTEMA_INICIALIZADO", detalle="Carga de datos iniciales (seed.py)"))
         db.commit()
 
         print("¡Base de datos la_esquina_del_cafe poblada con éxito!")

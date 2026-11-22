@@ -1,4 +1,4 @@
-const API_ADMIN = "http://127.0.0.1:8000/api/admin";
+const API_ADMIN = `${API_BASE}/api/admin`;
 let tipoSeleccionado = "ventas";
 
 async function cargarReporte() {
@@ -42,16 +42,13 @@ function descargarArchivo(formato) {
   if (inicio) params.append("fecha_inicio", inicio);
   if (fin) params.append("fecha_fin", fin);
 
-  window.open(`${API_ADMIN}/reportes/exportar?${params.toString()}`, "_blank");
+  window.open(conToken(`${API_ADMIN}/reportes/exportar?${params.toString()}`), "_blank");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const hoy = new Date();
-  const hace7 = new Date();
-  hace7.setDate(hoy.getDate() - 7);
-
-  document.getElementById("rep-fin").value = hoy.toISOString().split("T")[0];
-  document.getElementById("rep-inicio").value = hace7.toISOString().split("T")[0];
+  // toISOString() da la fecha UTC (de noche ya sería "mañana"): se usa el día del negocio
+  document.getElementById("rep-fin").value = hoyNegocioISO();
+  document.getElementById("rep-inicio").value = hoyNegocioISO(-7);
 
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", async () => {

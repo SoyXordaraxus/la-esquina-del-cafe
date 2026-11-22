@@ -1,12 +1,13 @@
-const API_AUTH = "http://127.0.0.1:8000/api/auth";
+const API_LOGIN = `${API_BASE}/api/auth/login`;
+const API_RECUPERAR = `${API_BASE}/api/auth/recuperar`;
 
 document.addEventListener("DOMContentLoaded", () => {
-  const formLogin = document.getElementById("form-login");
+  const form = document.getElementById("form-login");
   const errorBox = document.getElementById("login-error");
   const okBox = document.getElementById("login-ok");
-  const btnLogin = document.getElementById("btn-login");
+  const btn = document.getElementById("btn-login");
 
-  // Modal recuperación
+  // Modal de recuperación con Código Maestro
   const modalRec = document.getElementById("modal-recuperar");
   const btnAbrirRec = document.getElementById("btn-abrir-recuperar");
   const btnCancelarRec = document.getElementById("btn-cancelar-rec");
@@ -28,57 +29,69 @@ document.addEventListener("DOMContentLoaded", () => {
     modalRec.setAttribute("aria-hidden", "true");
   }
 
-  if (btnAbrirRec) btnAbrirRec.addEventListener("click", abrirModalRec);
-  if (btnCancelarRec) btnCancelarRec.addEventListener("click", cerrarModalRec);
+  if (btnAbrirRec && modalRec) btnAbrirRec.addEventListener("click", abrirModalRec);
+  if (btnCancelarRec && modalRec) btnCancelarRec.addEventListener("click", cerrarModalRec);
   if (modalRec) {
     modalRec.addEventListener("click", (e) => {
       if (e.target === modalRec) cerrarModalRec();
     });
   }
 
-  // --- Envío de Inicio de Sesión ---
-  if (formLogin) {
-    formLogin.addEventListener("submit", async (e) => {
+  // --- Inicio de sesión ---
+  if (form) {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorBox.style.display = "none";
-      okBox.style.display = "none";
-      btnLogin.disabled = true;
-      btnLogin.textContent = "Verificando...";
+      if (okBox) okBox.style.display = "none";
+      btn.disabled = true;
+      btn.textContent = "Verificando...";
 
       const usuario = document.getElementById("login-usuario").value.trim();
       const contrasena = document.getElementById("login-password").value;
 
       try {
-        const resp = await fetch(`${API_AUTH}/login`, {
+        const resp = await fetch(API_LOGIN, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ usuario, contrasena }),
         });
 
-        const data = await resp.json();
+        const data = await leerJsonSeguro(resp);
         if (!resp.ok) {
-          throw new Error(data.detail || "Usuario o contraseña incorrectos.");
+          throw new Error(mensajeError(data, "Usuario o contraseña incorrectos.", resp.status));
         }
 
-        const sesion = data.usuario || data;
-        localStorage.setItem("usuario", JSON.stringify(sesion));
+        const datos = data.usuario || data;
+        if (!datos.id_usuario || !datos.token || !datos.rol) {
+          throw new Error("Respuesta de inicio de sesión incompleta. Intenta de nuevo.");
+        }
+        const sesion = {
+          id_usuario: datos.id_usuario,
+          nombre_usuario: datos.nombre_usuario || datos.nombre,
+          nombre: datos.nombre || datos.nombre_usuario,
+          correo: datos.correo,
+          rol: datos.rol,
+          token: datos.token,
+          zona_horaria: datos.zona_horaria,
+        };
+        localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
 
         if (sesion.rol === "Administrador") {
-          window.location.href = "inicio.html";
+          window.location.replace("inicio.html");
         } else {
-          window.location.href = "caja.html";
+          window.location.replace("caja.html");
         }
       } catch (err) {
-        errorBox.textContent = err.message;
+        errorBox.textContent = mensajeExcepcion(err);
         errorBox.style.display = "block";
       } finally {
-        btnLogin.disabled = false;
-        btnLogin.textContent = "Iniciar sesión";
+        btn.disabled = false;
+        btn.textContent = "Iniciar sesión";
       }
     });
   }
 
-  // --- Envío de Recuperación Local ---
+  // --- Recuperación local con Código Maestro (público, sin token) ---
   if (formRec) {
     formRec.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -99,26 +112,28 @@ document.addEventListener("DOMContentLoaded", () => {
       btnGuardarRec.textContent = "Actualizando...";
 
       try {
-        const resp = await fetch(`${API_AUTH}/recuperar`, {
+        const resp = await fetch(API_RECUPERAR, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ usuario, codigo_maestro, nueva_contrasena }),
         });
 
-        const data = await resp.json();
+        const data = await leerJsonSeguro(resp);
         if (!resp.ok) {
-          throw new Error(data.detail || "No se pudo restablecer la contraseña.");
+          throw new Error(mensajeError(data, "No se pudo restablecer la contraseña.", resp.status));
         }
 
         cerrarModalRec();
         errorBox.style.display = "none";
-        okBox.textContent = data.mensaje || "Contraseña actualizada correctamente.";
-        okBox.style.display = "block";
+        if (okBox) {
+          okBox.textContent = data.mensaje || "Contraseña actualizada correctamente.";
+          okBox.style.display = "block";
+        }
         document.getElementById("login-usuario").value = usuario;
         document.getElementById("login-password").value = "";
         document.getElementById("login-password").focus();
       } catch (err) {
-        recError.textContent = err.message;
+        recError.textContent = mensajeExcepcion(err, "No se pudo restablecer la contraseña.");
         recError.style.display = "block";
       } finally {
         btnGuardarRec.disabled = false;

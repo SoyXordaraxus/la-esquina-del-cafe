@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000/api/dashboard/resumen";
+const API_URL = `${API_BASE}/api/dashboard/resumen`;
 
 function formatearMoneda(valor) {
   return valor.toLocaleString("es-MX", {

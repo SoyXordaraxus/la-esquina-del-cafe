@@ -7,8 +7,11 @@ from sqlalchemy import func
 
 from database import get_db
 from models import Usuario, Insumo, Proveedor, LoteInsumo, MovimientoInventario, Merma, Bitacora
+from services.contrasenas import verificar
+from services.sesion import usuario_actual
+from services.tiempo import formato_local, hoy_local
 
-router = APIRouter(prefix="/api/almacen", tags=["Almacén"])
+router = APIRouter(prefix="/api/almacen", tags=["Almacén"], dependencies=[Depends(usuario_actual)])
 
 MOTIVOS_MERMA = (
     "Caducidad",
@@ -103,7 +106,7 @@ def obtener_catalogos_recepcion(db: Session = Depends(get_db)):
 
 @router.get("/lotes")
 def listar_lotes(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()   # "vence hoy / mañana" según el calendario del negocio
     sincronizar_caducidades(db, hoy)
 
     lotes = (
@@ -167,13 +170,31 @@ def listar_lotes(db: Session = Depends(get_db)):
             "estado": estado_lote,
             "semaforo": semaforo,
             "numero_factura": l.numero_factura or "—",
-            "fecha_entrada": l.fecha_entrada.strftime("%Y-%m-%d %H:%M") if l.fecha_entrada else "",
+            "fecha_entrada": formato_local(l.fecha_entrada, "%Y-%m-%d %H:%M"),
         })
     return {"lotes": resultado}
 
 
+@router.get("/caducidades/resumen")
+def resumen_caducidades(db: Session = Depends(get_db)):
+    """Número del badge de Caducidades: lotes caducados o que vencen en <= 5 días."""
+    lotes = listar_lotes(db)["lotes"]
+    alertas = [
+        l for l in lotes
+        if l["estado"] == "Caducado"
+        or (l["estado"] == "Vigente" and l["dias_restantes"] is not None and l["dias_restantes"] <= 5)
+    ]
+    return {
+        "alertas": len(alertas),
+        "caducados": sum(1 for l in alertas if l["estado"] == "Caducado"),
+        "por_vencer": sum(1 for l in alertas if l["estado"] == "Vigente"),
+        "fecha_negocio": str(hoy_local()),
+    }
+
+
 @router.post("/recepcion")
-def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_db)):
+def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_db), actual: Usuario = Depends(usuario_actual)):
+    datos.id_usuario = actual.id_usuario
     insumo = db.query(Insumo).filter(Insumo.id_insumo == datos.id_insumo).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="El insumo seleccionado no existe.")
@@ -185,7 +206,7 @@ def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="Este insumo es perecedero y requiere fecha de caducidad.")
 
     # RF 4.1: la fecha de caducidad debe ser >= fecha actual
-    if datos.caducidad and datos.caducidad < date.today():
+    if datos.caducidad and datos.caducidad < hoy_local():
         raise HTTPException(status_code=400, detail="La fecha de caducidad no puede ser anterior a hoy.")
 
     cantidad_convertida = convertir_a_unidad_base(datos.cantidad_ingresada, datos.unidad_compra, insumo)
@@ -249,13 +270,14 @@ def listar_mermas(db: Session = Depends(get_db)):
             "motivo": m.motivo,
             "notas": m.notas or "",
             "responsable": f"{usr.nombre_usuario} ({usr.rol})" if usr else f"Usuario #{m.id_usuario}",
-            "fecha": m.fecha.strftime("%d/%m/%Y %H:%M") if m.fecha else "",
+            "fecha": formato_local(m.fecha, "%d/%m/%Y %H:%M"),
         })
     return {"mermas": resultado}
 
 
 @router.post("/mermas")
-def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db)):
+def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db), actual: Usuario = Depends(usuario_actual)):
+    datos.id_usuario = actual.id_usuario   # RF 11.1: el rol se toma de la sesión, no del navegador
     if datos.motivo not in MOTIVOS_MERMA:
         raise HTTPException(status_code=400, detail="Motivo de merma no válido.")
 
@@ -283,17 +305,18 @@ def registrar_merma(datos: RegistroMermaSchema, db: Session = Depends(get_db)):
                 status_code=403,
                 detail="AUTORIZACION_REQUERIDA: Esta merma supera los $100.00 MXN y requiere contraseña de Administrador.",
             )
-        admin = (
+        administradores = (
             db.query(Usuario)
             .filter(
                 func.lower(Usuario.rol).like("%admin%"),
                 func.lower(Usuario.estado) == "activo",
-                Usuario.contrasena == datos.password_admin.strip(),
             )
-            .first()
+            .all()
         )
+        admin = next((a for a in administradores if verificar(datos.password_admin.strip(), a.contrasena)), None)
         if not admin:
-            raise HTTPException(status_code=401, detail="Contraseña de Administrador incorrecta. Operación anulada.")
+            # 403 y no 401: el 401 significa "sesión vencida" y el frontend cerraría la sesión del cajero
+            raise HTTPException(status_code=403, detail="Contraseña de Administrador incorrecta. Operación anulada.")
         id_autorizador = admin.id_usuario
 
     lote.cantidad_disponible = float(lote.cantidad_disponible) - datos.cantidad

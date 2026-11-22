@@ -1,5 +1,39 @@
-const API_USUARIOS = "http://127.0.0.1:8000/api/admin/usuarios";
+const API_USUARIOS = `${API_BASE}/api/admin/usuarios`;
 let listaUsuarios = [];
+
+const PATRON_CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function mostrarMensajeUsuarios(texto, esError = false) {
+  const msg = document.getElementById("msg-usuarios");
+  msg.className = esError ? "alerta-error" : "badge-verde";
+  msg.style.display = "block";
+  msg.style.padding = "12px 16px";
+  msg.style.borderRadius = "10px";
+  msg.textContent = texto;
+}
+
+// Mismas reglas que el backend (RF 1.1); devuelve el primer problema o null
+function validarFormularioUsuario(payload, idEditando) {
+  if (!payload.nombre_usuario) return "El nombre de usuario es obligatorio.";
+  if (!payload.correo) return "El correo electrónico es obligatorio.";
+  if (!PATRON_CORREO.test(payload.correo)) return "El correo electrónico no es válido. Ejemplo: nombre@dominio.com";
+
+  const pass = payload.contrasena;
+  if (!idEditando && !pass) return "La contraseña es obligatoria.";
+  if (pass) {
+    if (pass.length < 8) return "La contraseña debe tener al menos 8 caracteres.";
+    if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(pass) || !/\d/.test(pass)) return "La contraseña debe combinar letras y números.";
+  }
+
+  const otro = listaUsuarios.filter(u => String(u.id_usuario) !== String(idEditando || ""));
+  if (otro.some(u => u.nombre_usuario.toLowerCase() === payload.nombre_usuario.toLowerCase())) {
+    return `El nombre de usuario «${payload.nombre_usuario}» ya está en uso. Elige otro.`;
+  }
+  if (otro.some(u => u.correo.toLowerCase() === payload.correo.toLowerCase())) {
+    return `El correo ${payload.correo.toLowerCase()} ya está registrado en otra cuenta.`;
+  }
+  return null;
+}
 
 function abrirNuevoUsuario() {
   document.getElementById("titulo-modal-usr").textContent = "Nuevo usuario";
@@ -52,14 +86,25 @@ function alternarEstadoUsuario(id) {
           id_admin: admin.id_usuario || 1,
         }),
       });
-      if (resp.ok) await cargarUsuarios();
+      if (!resp.ok) {
+        mostrarMensajeUsuarios(mensajeError(await leerJsonSeguro(resp), "No se pudo cambiar el estado de la cuenta.", resp.status), true);
+        return;
+      }
+      await cargarUsuarios();
     },
   });
 }
 
 async function cargarUsuarios() {
-  const resp = await fetch(API_USUARIOS);
-  const data = await resp.json();
+  let data;
+  try {
+    const resp = await fetch(API_USUARIOS);
+    data = await leerJsonSeguro(resp);
+    if (!resp.ok) throw new Error(mensajeError(data, "No se pudo cargar la lista de usuarios.", resp.status));
+  } catch (err) {
+    mostrarMensajeUsuarios(mensajeExcepcion(err, "No se pudo cargar la lista de usuarios."), true);
+    return;
+  }
   listaUsuarios = data.usuarios || [];
 
   document.getElementById("tabla-usuarios").innerHTML = listaUsuarios.map(u => `
@@ -83,6 +128,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await cargarUsuarios();
   document.getElementById("btn-nuevo-usuario").addEventListener("click", abrirNuevoUsuario);
 
+  // Validación propia con mensajes en español (en lugar de la burbuja del navegador)
+  document.getElementById("form-usuario").noValidate = true;
+
   document.getElementById("form-usuario").addEventListener("submit", async (e) => {
     e.preventDefault();
     const errBox = document.getElementById("error-modal-usr");
@@ -99,25 +147,27 @@ document.addEventListener("DOMContentLoaded", async () => {
       id_admin: admin.id_usuario || 1,
     };
 
+    const problema = validarFormularioUsuario(payload, id);
+    if (problema) {
+      errBox.textContent = problema;
+      errBox.style.display = "block";
+      return;
+    }
+
     try {
       const resp = await fetch(id ? `${API_USUARIOS}/${id}` : API_USUARIOS, {
         method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "No se pudo guardar el usuario.");
+      const data = await leerJsonSeguro(resp);
+      if (!resp.ok) throw new Error(mensajeError(data, "No se pudo guardar el usuario.", resp.status));
 
       cerrarModal("modal-usuario");
-      const msg = document.getElementById("msg-usuarios");
-      msg.className = "badge-verde";
-      msg.style.display = "block";
-      msg.style.padding = "12px 16px";
-      msg.style.borderRadius = "10px";
-      msg.textContent = data.mensaje;
+      mostrarMensajeUsuarios(data.mensaje);
       await cargarUsuarios();
     } catch (err) {
-      errBox.textContent = err.message;
+      errBox.textContent = mensajeExcepcion(err, "No se pudo guardar el usuario.");
       errBox.style.display = "block";
     }
   });

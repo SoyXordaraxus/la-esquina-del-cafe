@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DECIMAL, TIMESTAMP, Date, ForeignKey
 from sqlalchemy.sql import func
 from database import Base
+from services.tiempo import ahora_utc
 
 class Usuario(Base):
     __tablename__ = "usuario"
@@ -10,7 +11,7 @@ class Usuario(Base):
     contrasena = Column(String(100), nullable=False)
     rol = Column(String(30), nullable=False)
     estado = Column(String(20), default="Activo")
-    fecha_registro = Column(TIMESTAMP, server_default=func.now())
+    fecha_registro = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
 
 class Proveedor(Base):
     __tablename__ = "proveedor"
@@ -41,7 +42,7 @@ class LoteInsumo(Base):
     cantidad_recibida = Column(DECIMAL(10, 2), nullable=False)
     cantidad_disponible = Column(DECIMAL(10, 2), nullable=False)
     costo_unitario = Column(DECIMAL(10, 2), nullable=False)
-    fecha_entrada = Column(TIMESTAMP, server_default=func.now())
+    fecha_entrada = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
     caducidad = Column(Date, nullable=True)
     numero_factura = Column(String(50), nullable=True)
     estado = Column(String(20), nullable=False, default="Disponible")
@@ -70,7 +71,7 @@ class Venta(Base):
     monto_recibido = Column(DECIMAL(10, 2), nullable=False)
     cambio = Column(DECIMAL(10, 2), nullable=False)
     estado = Column(String(20), default="completada")
-    fecha_emision_ticket = Column(TIMESTAMP, server_default=func.now())
+    fecha_emision_ticket = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
 
 class DetalleVenta(Base):
     __tablename__ = "detalle_venta"
@@ -99,7 +100,7 @@ class MovimientoInventario(Base):
     tipo_movimiento = Column(String(30), nullable=False)
     cantidad = Column(DECIMAL(10, 2), nullable=False)
     motivo = Column(String(255), nullable=True)
-    fecha_movimiento = Column(TIMESTAMP, server_default=func.now())
+    fecha_movimiento = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
 
 class Merma(Base):
     __tablename__ = "merma"
@@ -112,7 +113,7 @@ class Merma(Base):
     costo_perdida = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     motivo = Column(String(255), nullable=False)
     notas = Column(String(255), nullable=True)
-    fecha = Column(TIMESTAMP, server_default=func.now())
+    fecha = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
 
 class CorteCaja(Base):
     __tablename__ = "corte_caja"
@@ -122,7 +123,7 @@ class CorteCaja(Base):
     efectivo_fisico = Column(DECIMAL(10, 2), nullable=False)
     diferencia = Column(DECIMAL(10, 2), nullable=False)
     estado = Column(String(20), default="cerrado")
-    fecha_inicio = Column(TIMESTAMP, server_default=func.now())
+    fecha_inicio = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
     fecha_cierre = Column(TIMESTAMP, nullable=True)
 
 class AlertaInventario(Base):
@@ -132,7 +133,7 @@ class AlertaInventario(Base):
     tipo_alerta = Column(String(50), nullable=False)
     mensaje = Column(String(255), nullable=False)
     leida = Column(Boolean, default=False)
-    fecha_alerta = Column(TIMESTAMP, server_default=func.now())
+    fecha_alerta = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)
 
 class Bitacora(Base):
     __tablename__ = "bitacora"
@@ -140,4 +141,4 @@ class Bitacora(Base):
     id_usuario = Column(Integer, ForeignKey("usuario.id_usuario"), nullable=False)
     accion = Column(String(60), nullable=False)
     detalle = Column(String(255), nullable=False)
-    fecha_hora = Column(TIMESTAMP, server_default=func.now())
+    fecha_hora = Column(TIMESTAMP, server_default=func.now(), default=ahora_utc)

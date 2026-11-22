@@ -1,4 +1,4 @@
-const API_LOTES = "http://127.0.0.1:8000/api/almacen/lotes";
+const API_LOTES = `${API_BASE}/api/almacen/lotes`;
 let todosLosLotes = [];
 
 function formatearFecha(iso) {

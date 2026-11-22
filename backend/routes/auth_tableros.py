@@ -1,3 +1,4 @@
+import hmac
 import os
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,10 +7,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import Usuario, Insumo, LoteInsumo, Venta, Merma, Bitacora
+from models import Usuario, Insumo, LoteInsumo, Venta, Merma
+from services.bitacora import registrar_bitacora
+from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear, necesita_rehash, verificar
+from services.sesion import crear_token, requiere_admin, rol_normalizado
+from services.tiempo import NOMBRE_ZONA, hoy_local, rango_utc
 
 router = APIRouter(prefix="/api", tags=["Auth y Tableros"])
 
+# Código maestro del establecimiento para recuperar contraseñas sin correo (variable CODIGO_MAESTRO)
 CODIGO_MAESTRO_RECUPERACION = os.getenv("CODIGO_MAESTRO", "CAFE-MAESTRO-2026")
 
 
@@ -21,11 +27,7 @@ class LoginSchema(BaseModel):
 class RecuperarContrasenaSchema(BaseModel):
     usuario: str = Field(..., min_length=1)
     codigo_maestro: str = Field(..., min_length=1)
-    nueva_contrasena: str = Field(..., min_length=8)
-
-
-def registrar_bitacora(db: Session, id_usuario: int, accion: str, detalle: str):
-    db.add(Bitacora(id_usuario=id_usuario, accion=accion, detalle=detalle))
+    nueva_contrasena: str = Field(..., min_length=1)   # la política se valida en el endpoint
 
 
 # ==========================================
@@ -48,36 +50,48 @@ def iniciar_sesion(datos: LoginSchema, db: Session = Depends(get_db)):
         .first()
     )
 
-    if not usuario or usuario.contrasena != pass_input:
+    if not usuario or not verificar(pass_input, usuario.contrasena):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
 
     if (usuario.estado or "").lower() != "activo":
         raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
 
     # Normalizar rol para el contrato del frontend ("Administrador" | "Cajero")
-    rol_norm = "Administrador" if "admin" in usuario.rol.lower() else "Cajero"
+    rol_norm = rol_normalizado(usuario.rol)
+
+    # Migra contraseñas antiguas en texto plano (o con menos iteraciones) al hash actual
+    if necesita_rehash(usuario.contrasena):
+        usuario.contrasena = hashear(pass_input)
 
     registrar_bitacora(db, usuario.id_usuario, "SESION_INICIADA", f"Inicio de sesión correcto · Rol: {rol_norm}")
     db.commit()
 
     return {
         "id_usuario": usuario.id_usuario,
-        "nombre": usuario.nombre_usuario,
+        "nombre_usuario": usuario.nombre_usuario,
+        "nombre": usuario.nombre_usuario,   # lo usa menu.js para el avatar
         "correo": usuario.correo,
         "rol": rol_norm,
+        "token": crear_token(usuario),
+        "zona_horaria": NOMBRE_ZONA,        # config.js la usa para mostrar fechas
     }
 
 
+# Público (sin token), igual que el login. El 403 por código incorrecto no es "sesión
+# vencida": config.js solo cierra sesión con 401 y además excluye esta ruta.
 @router.post("/auth/recuperar")
 def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends(get_db)):
-    if (datos.codigo_maestro or "").strip() != CODIGO_MAESTRO_RECUPERACION:
+    codigo = (datos.codigo_maestro or "").strip().encode("utf-8")
+    if not hmac.compare_digest(codigo, CODIGO_MAESTRO_RECUPERACION.encode("utf-8")):
         raise HTTPException(status_code=403, detail="El Código Maestro de recuperación es incorrecto.")
 
     user_input = (datos.usuario or "").strip()
     nueva_pass = (datos.nueva_contrasena or "").strip()
 
-    if not user_input or len(nueva_pass) < 8:
-        raise HTTPException(status_code=400, detail="Usuario requerido y nueva contraseña de al menos 8 caracteres.")
+    if not user_input:
+        raise HTTPException(status_code=400, detail="Escribe tu usuario o correo.")
+    if not cumple_politica(nueva_pass):
+        raise HTTPException(status_code=400, detail=MENSAJE_POLITICA)
 
     usuario = (
         db.query(Usuario)
@@ -94,7 +108,7 @@ def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends
     if (usuario.estado or "").lower() != "activo":
         raise HTTPException(status_code=403, detail="Esta cuenta está desactivada. Contacta al Administrador.")
 
-    usuario.contrasena = nueva_pass
+    usuario.contrasena = hashear(nueva_pass)
     registrar_bitacora(
         db,
         usuario.id_usuario,
@@ -109,22 +123,24 @@ def recuperar_contrasena(datos: RecuperarContrasenaSchema, db: Session = Depends
 # ==========================================
 # 1. PANEL PRINCIPAL (02_Panel)
 # ==========================================
-@router.get("/dashboard/resumen")
+@router.get("/dashboard/resumen", dependencies=[Depends(requiere_admin)])
 def obtener_resumen_dia(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()
     limite_caducidad = hoy + timedelta(days=5)  # RF 6.1: alertas hasta 5 días
 
+    # Día y mes de calendario del negocio, convertidos a UTC para comparar
+    inicio_dia, fin_dia = rango_utc(hoy)
     ventas_hoy = db.query(Venta).filter(
-        func.date(Venta.fecha_emision_ticket) == hoy,
+        Venta.fecha_emision_ticket >= inicio_dia,
+        Venta.fecha_emision_ticket < fin_dia,
         func.lower(Venta.estado) == "completada"
     ).all()
-    if not ventas_hoy:
-        ventas_hoy = db.query(Venta).filter(func.lower(Venta.estado) == "completada").all()
 
     ventas_dia = sum(float(v.total) for v in ventas_hoy)
     tickets_dia = len(ventas_hoy)
 
-    mermas = db.query(Merma).all()
+    inicio_mes, fin_mes = rango_utc(hoy.replace(day=1), hoy)
+    mermas = db.query(Merma).filter(Merma.fecha >= inicio_mes, Merma.fecha < fin_mes).all()
     registros_mermas = len(mermas)
     mermas_mes = sum(float(m.costo_perdida) for m in mermas)
 
@@ -244,9 +260,9 @@ def calcular_estado_semaforo(existencia_actual: float, existencia_minima: float)
         return {"color": "rojo", "etiqueta": "Existencias críticas", "porcentaje": porcentaje}
 
 
-@router.get("/inventario/semaforo")
+@router.get("/inventario/semaforo", dependencies=[Depends(requiere_admin)])
 def obtener_inventario_semaforo(db: Session = Depends(get_db)):
-    hoy = date.today()
+    hoy = hoy_local()
     insumos = db.query(Insumo).filter(Insumo.estado == "Activo").all()
 
     resultado = []

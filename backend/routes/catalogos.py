@@ -5,9 +5,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import Insumo, Producto, Receta, LoteInsumo, DetalleVenta, Bitacora
+from models import Insumo, Producto, Receta, LoteInsumo, DetalleVenta, Bitacora, Usuario
+from services.sesion import requiere_admin, usuario_actual
 
-router = APIRouter(prefix="/api/catalogos", tags=["Catálogos (Insumos y Productos)"])
+router = APIRouter(
+    prefix="/api/catalogos",
+    tags=["Catálogos (Insumos y Productos)"],
+    dependencies=[Depends(requiere_admin)],
+)
 
 UNIDADES_BASE_VALIDAS = ("g", "ml", "pza")
 UNIDADES_COMPRA_VALIDAS = ("kg", "L", "cja", "paq", "g", "ml", "pza")
@@ -69,7 +74,8 @@ def listar_insumos(incluir_inactivos: bool = True, db: Session = Depends(get_db)
 
 
 @router.post("/insumos", status_code=201)
-def crear_insumo(datos: InsumoEntrada, db: Session = Depends(get_db)):
+def crear_insumo(datos: InsumoEntrada, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_usuario = admin.id_usuario
     nombre = datos.nombre.strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre del insumo es obligatorio.")
@@ -108,7 +114,8 @@ def crear_insumo(datos: InsumoEntrada, db: Session = Depends(get_db)):
 
 
 @router.put("/insumos/{id_insumo}")
-def actualizar_insumo(id_insumo: int, datos: InsumoEntrada, db: Session = Depends(get_db)):
+def actualizar_insumo(id_insumo: int, datos: InsumoEntrada, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_usuario = admin.id_usuario
     insumo = db.query(Insumo).filter(Insumo.id_insumo == id_insumo).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado.")
@@ -148,7 +155,8 @@ def actualizar_insumo(id_insumo: int, datos: InsumoEntrada, db: Session = Depend
 
 
 @router.delete("/insumos/{id_insumo}")
-def eliminar_o_desactivar_insumo(id_insumo: int, id_usuario: int = 1, db: Session = Depends(get_db)):
+def eliminar_o_desactivar_insumo(id_insumo: int, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    id_usuario = admin.id_usuario
     insumo = db.query(Insumo).filter(Insumo.id_insumo == id_insumo).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado.")
@@ -214,7 +222,8 @@ def listar_productos_con_recetas(db: Session = Depends(get_db)):
 
 
 @router.post("/productos", status_code=201)
-def crear_producto(datos: ProductoEntrada, db: Session = Depends(get_db)):
+def crear_producto(datos: ProductoEntrada, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_usuario = admin.id_usuario
     nombre = datos.nombre.strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre del producto es obligatorio.")
@@ -256,7 +265,8 @@ def crear_producto(datos: ProductoEntrada, db: Session = Depends(get_db)):
 
 
 @router.put("/productos/{id_producto}")
-def actualizar_producto(id_producto: int, datos: ProductoEntrada, db: Session = Depends(get_db)):
+def actualizar_producto(id_producto: int, datos: ProductoEntrada, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_usuario = admin.id_usuario
     producto = db.query(Producto).filter(Producto.id_producto == id_producto).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")

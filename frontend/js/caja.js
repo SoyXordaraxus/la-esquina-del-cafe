@@ -3,9 +3,7 @@
 // Autor: Francisco
 // =========================================================
 
-const API_URL = window.location.hostname.includes("github.dev")
-  ? `${window.location.origin.replace(/-\d+\./, "-8000.")}/api/ventas`
-  : "http://localhost:8000/api/ventas";
+const API_URL = `${API_BASE}/api/ventas`;
 
 // Catálogo local de respaldo (se usa si el backend aún no está encendido)
 const CATALOGO_RESPALDO = [
@@ -258,9 +256,8 @@ async function procesarVenta() {
     }
   }
 
-  const usuarioActivo = JSON.parse(localStorage.getItem("usuario") || '{"id_usuario": 1}');
   const payload = {
-    id_usuario: usuarioActivo.id_usuario || 1,
+    id_usuario: idUsuarioActual(),   // informativo: el backend toma al cajero de la sesión
     forma_pago: formaPago,
     monto_recibido: montoRecibido,
     detalles: comanda.map(item => ({
@@ -307,10 +304,8 @@ async function procesarVenta() {
   if (!resp.ok) {
     cerrarModal("modal-cobro");
     const alertaStock = document.getElementById("alerta-stock");
-    // "detail" es texto en 400/409; en otros errores puede ser una lista u omitirse
-    alertaStock.textContent = (typeof data.detail === "string" && data.detail)
-      ? data.detail
-      : "No se realizó el cobro. Revise la comanda e intente de nuevo.";
+    // 409 sin stock, 400 datos inválidos, 422 de validación o 500: siempre texto legible
+    alertaStock.textContent = mensajeError(data, "No se realizó el cobro. Revise la comanda e intente de nuevo.", resp.status);
     alertaStock.style.display = "block";
     cargarProductos();   // vuelve a pedir el catálogo: los productos sin stock se ponen en gris
     return;

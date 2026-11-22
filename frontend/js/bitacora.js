@@ -1,4 +1,4 @@
-const API_ADMIN_BIT = "http://127.0.0.1:8000/api/admin";
+const API_ADMIN_BIT = `${API_BASE}/api/admin`;
 
 async function cargarBitacora() {
   const usr = document.getElementById("bit-usuario").value;

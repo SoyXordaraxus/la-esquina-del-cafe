@@ -1,4 +1,4 @@
-const API_SEMAFORO = "http://127.0.0.1:8000/api/inventario/semaforo";
+const API_SEMAFORO = `${API_BASE}/api/inventario/semaforo`;
 
 let productosInventario = [];
 let colorActivo = "todos";

@@ -1,4 +1,4 @@
-const API_ALMACEN = "http://127.0.0.1:8000/api/almacen";
+const API_ALMACEN = `${API_BASE}/api/almacen`;
 let catalogosInsumos = [];
 
 function mostrarMensajeRecepcion(texto, esError = false) {
@@ -100,10 +100,10 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
+      const data = await leerJsonSeguro(res);
 
       if (!res.ok) {
-        mostrarMensajeRecepcion(data.detail || "Error al registrar la entrada.", true);
+        mostrarMensajeRecepcion(mensajeError(data, "Error al registrar la entrada.", res.status), true);
         return;
       }
 
@@ -112,7 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
       actualizarUnidadPorDefecto();
       cargarTablaLotes();
     } catch (err) {
-      mostrarMensajeRecepcion("Error de red al guardar el lote.", true);
+      mostrarMensajeRecepcion(mensajeExcepcion(err, "Error de red al guardar el lote."), true);
     }
   });
 });

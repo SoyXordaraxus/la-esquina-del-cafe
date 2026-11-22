@@ -1,4 +1,4 @@
-const API_BKP = "http://127.0.0.1:8000/api/admin/respaldos";
+const API_BKP = `${API_BASE}/api/admin/respaldos`;
 
 async function cargarRespaldos() {
   const resp = await fetch(API_BKP);
@@ -21,7 +21,7 @@ async function cargarRespaldos() {
       <td><strong>${escaparHtml(r.folio)}</strong> · ${escaparHtml(r.ubicacion)}</td>
       <td>${escaparHtml(r.tamano)}</td>
       <td>
-        <a href="${API_BKP}/descargar/${encodeURIComponent(r.archivo)}" class="btn btn-secundario">Descargar .SQL</a>
+        <a href="${conToken(`${API_BKP}/descargar/${encodeURIComponent(r.archivo)}`)}" class="btn btn-secundario">Descargar .SQL</a>
       </td>
     </tr>
   `).join("");
@@ -41,8 +41,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const resp = await fetch(`${API_BKP}/ejecutar?tipo=manual&id_usuario=${u.id_usuario || 1}`, {
         method: "POST",
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "Error al generar respaldo.");
+      const data = await leerJsonSeguro(resp);
+      if (!resp.ok) throw new Error(mensajeError(data, "Error al generar respaldo.", resp.status));
 
       msg.className = "badge-verde";
       msg.style.display = "block";
@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (err) {
       msg.className = "alerta-error";
       msg.style.display = "block";
-      msg.textContent = err.message;
+      msg.textContent = mensajeExcepcion(err);
     } finally {
       btn.disabled = false;
       btn.textContent = "Respaldar base de datos ahora";

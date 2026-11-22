@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,9 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import get_db, engine
+from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear
+from services.sesion import requiere_admin
+from services.tiempo import ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
 from models import (
     Usuario,
     Insumo,
@@ -23,7 +27,11 @@ from models import (
     Bitacora,
 )
 
-router = APIRouter(prefix="/api/admin", tags=["Administración, Reportes y Auditoría"])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["Administración, Reportes y Auditoría"],
+    dependencies=[Depends(requiere_admin)],
+)
 
 CARPETA_BACKUPS = Path(__file__).resolve().parent.parent / "backups"
 CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
@@ -131,19 +139,19 @@ def generar_pdf_tabla(titulo: str, subtitulo: str, columnas: list, filas: list) 
 # 1. REPORTES EXPORTABLES (RF 12)
 # =========================================================
 def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db: Session) -> dict:
-    inicio_dt = datetime.combine(fecha_inicio, datetime.min.time())
-    fin_dt = datetime.combine(fecha_fin, datetime.max.time())
+    # Días de calendario del negocio -> rango UTC semiabierto [inicio_dt, fin_dt)
+    inicio_dt, fin_dt = rango_utc(fecha_inicio, fecha_fin)
 
     if tipo == "ventas":
         ventas = (
             db.query(Venta)
-            .filter(Venta.fecha_emision_ticket.between(inicio_dt, fin_dt))
+            .filter(Venta.fecha_emision_ticket >= inicio_dt, Venta.fecha_emision_ticket < fin_dt)
             .order_by(Venta.fecha_emision_ticket.asc())
             .all()
         )
         por_dia = {}
         for v in ventas:
-            dia_str = v.fecha_emision_ticket.strftime("%Y-%m-%d")
+            dia_str = formato_local(v.fecha_emision_ticket, "%Y-%m-%d")
             if dia_str not in por_dia:
                 por_dia[dia_str] = {"completadas": 0, "brutas": 0.0, "cancelaciones": 0.0}
             monto = float(v.total)
@@ -186,7 +194,8 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
             db.query(MovimientoInventario)
             .filter(
                 MovimientoInventario.tipo_movimiento == "SALIDA_VENTA",
-                MovimientoInventario.fecha_movimiento.between(inicio_dt, fin_dt),
+                MovimientoInventario.fecha_movimiento >= inicio_dt,
+                MovimientoInventario.fecha_movimiento < fin_dt,
             )
             .all()
         )
@@ -213,7 +222,7 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
     elif tipo == "mermas":
         mermas = (
             db.query(Merma)
-            .filter(Merma.fecha.between(inicio_dt, fin_dt))
+            .filter(Merma.fecha >= inicio_dt, Merma.fecha < fin_dt)
             .order_by(Merma.fecha.desc())
             .all()
         )
@@ -224,7 +233,7 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
             costo = float(m.costo_perdida)
             total_perdida += costo
             filas.append([
-                m.fecha.strftime("%Y-%m-%d %H:%M") if m.fecha else "",
+                formato_local(m.fecha, "%Y-%m-%d %H:%M"),
                 ins.nombre if ins else f"Insumo #{m.id_insumo}",
                 f"{float(m.cantidad):g} {ins.unidad_medida if ins else ''}",
                 m.motivo,
@@ -247,7 +256,7 @@ def consultar_reporte(
     fecha_fin: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    hoy = date.today()
+    hoy = hoy_local()
     f_fin = fecha_fin or hoy
     f_ini = fecha_inicio or (f_fin - timedelta(days=30))
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
@@ -261,10 +270,11 @@ def exportar_reporte(
     formato: str = "csv",
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
-    id_usuario: int = 1,
     db: Session = Depends(get_db),
+    admin: Usuario = Depends(requiere_admin),
 ):
-    hoy = date.today()
+    id_usuario = admin.id_usuario
+    hoy = hoy_local()
     f_fin = fecha_fin or hoy
     f_ini = fecha_inicio or (f_fin - timedelta(days=30))
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
@@ -313,12 +323,17 @@ def exportar_reporte(
 # =========================================================
 # 2. GESTIÓN DE USUARIOS (RF 1, RF 1.1, RF 14)
 # =========================================================
+PATRON_CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validar_correo(correo: str):
+    if not PATRON_CORREO.match(correo or ""):
+        raise HTTPException(status_code=400, detail="El correo electrónico no es válido. Ejemplo: nombre@dominio.com")
+
+
 def _validar_password_rf11(pwd: str):
-    if len(pwd) < 8 or not any(c.isalpha() for c in pwd) or not any(c.isdigit() for c in pwd):
-        raise HTTPException(
-            status_code=400,
-            detail="La contraseña debe ser alfanumérica (letras y números) y tener al menos 8 caracteres.",
-        )
+    if not cumple_politica(pwd):
+        raise HTTPException(status_code=400, detail=MENSAJE_POLITICA)
 
 
 @router.get("/usuarios")
@@ -332,7 +347,7 @@ def listar_usuarios(db: Session = Depends(get_db)):
                 "correo": u.correo,
                 "rol": "Administrador" if "admin" in (u.rol or "").lower() else "Cajero",
                 "estado": u.estado or "Activo",
-                "fecha_registro": u.fecha_registro.strftime("%Y-%m-%d") if u.fecha_registro else "—",
+                "fecha_registro": formato_local(u.fecha_registro, "%Y-%m-%d", "—"),
             }
             for u in usuarios
         ]
@@ -340,24 +355,26 @@ def listar_usuarios(db: Session = Depends(get_db)):
 
 
 @router.post("/usuarios", status_code=201)
-def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db)):
+def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_admin = admin.id_usuario
     nombre = datos.nombre_usuario.strip()
     correo = datos.correo.strip().lower()
     if not nombre or not correo:
         raise HTTPException(status_code=400, detail="Nombre de usuario y correo son obligatorios.")
 
+    _validar_correo(correo)
     _validar_password_rf11(datos.contrasena)
 
     if db.query(Usuario).filter(func.lower(Usuario.nombre_usuario) == nombre.lower()).first():
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso.")
+        raise HTTPException(status_code=409, detail=f"El nombre de usuario «{nombre}» ya está en uso. Elige otro.")
     if db.query(Usuario).filter(func.lower(Usuario.correo) == correo).first():
-        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
+        raise HTTPException(status_code=409, detail=f"El correo {correo} ya está registrado en otra cuenta.")
 
     rol_valido = "Administrador" if datos.rol == "Administrador" else "Cajero"
     nuevo = Usuario(
         nombre_usuario=nombre,
         correo=correo,
-        contrasena=datos.contrasena,
+        contrasena=hashear(datos.contrasena.strip()),
         rol=rol_valido,
         estado="Activo",
     )
@@ -374,13 +391,17 @@ def crear_usuario(datos: UsuarioCrearSchema, db: Session = Depends(get_db)):
 
 
 @router.put("/usuarios/{id_usuario}")
-def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = Depends(get_db)):
+def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    datos.id_admin = admin.id_usuario
     usr = db.query(Usuario).filter(Usuario.id_usuario == id_usuario).first()
     if not usr:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
     nombre = datos.nombre_usuario.strip()
     correo = datos.correo.strip().lower()
+    if not nombre or not correo:
+        raise HTTPException(status_code=400, detail="Nombre de usuario y correo son obligatorios.")
+    _validar_correo(correo)
 
     dup_user = (
         db.query(Usuario)
@@ -388,7 +409,7 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
         .first()
     )
     if dup_user:
-        raise HTTPException(status_code=400, detail="Otro usuario ya tiene ese nombre.")
+        raise HTTPException(status_code=409, detail=f"El nombre de usuario «{nombre}» ya está en uso. Elige otro.")
 
     dup_mail = (
         db.query(Usuario)
@@ -396,11 +417,11 @@ def editar_usuario(id_usuario: int, datos: UsuarioEditarSchema, db: Session = De
         .first()
     )
     if dup_mail:
-        raise HTTPException(status_code=400, detail="Otro usuario ya usa ese correo.")
+        raise HTTPException(status_code=409, detail=f"El correo {correo} ya está registrado en otra cuenta.")
 
     if datos.contrasena and datos.contrasena.strip():
         _validar_password_rf11(datos.contrasena.strip())
-        usr.contrasena = datos.contrasena.strip()
+        usr.contrasena = hashear(datos.contrasena.strip())
 
     estado_anterior = usr.estado
     usr.nombre_usuario = nombre
@@ -434,9 +455,9 @@ def consultar_bitacora(
     if id_usuario:
         consulta = consulta.filter(Bitacora.id_usuario == id_usuario)
     if fecha_inicio:
-        consulta = consulta.filter(Bitacora.fecha_hora >= datetime.combine(fecha_inicio, datetime.min.time()))
+        consulta = consulta.filter(Bitacora.fecha_hora >= rango_utc(fecha_inicio)[0])
     if fecha_fin:
-        consulta = consulta.filter(Bitacora.fecha_hora <= datetime.combine(fecha_fin, datetime.max.time()))
+        consulta = consulta.filter(Bitacora.fecha_hora < rango_utc(fecha_fin)[1])
 
     registros = consulta.limit(min(max(limite, 1), 500)).all()
     salida = []
@@ -444,8 +465,8 @@ def consultar_bitacora(
         usr = db.query(Usuario).filter(Usuario.id_usuario == b.id_usuario).first()
         salida.append({
             "id_bitacora": b.id_bitacora,
-            "fecha": b.fecha_hora.strftime("%d %b %Y") if b.fecha_hora else "—",
-            "hora": b.fecha_hora.strftime("%H:%M:%S") if b.fecha_hora else "—",
+            "fecha": formato_local(b.fecha_hora, "%d %b %Y", "—"),
+            "hora": formato_local(b.fecha_hora, "%H:%M:%S", "—"),
             "usuario": usr.nombre_usuario if usr else f"Usuario #{b.id_usuario}",
             "rol": usr.rol if usr else "—",
             "accion": b.accion,
@@ -471,7 +492,7 @@ def listar_respaldos():
     lista = []
     for idx, f in enumerate(archivos, start=1):
         stat = f.stat()
-        dt = datetime.fromtimestamp(stat.st_mtime)
+        dt = datetime.fromtimestamp(stat.st_mtime, ZONA_NEGOCIO)
         tam_kb = round(stat.st_size / 1024, 1)
         lista.append({
             "archivo": f.name,
@@ -489,18 +510,19 @@ def listar_respaldos():
     }
 
 
-@router.post("/respaldos/ejecutar")
-def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session = Depends(get_db)):
-    ahora = datetime.now()
-    nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
-    ruta = CARPETA_BACKUPS / nombre
+def _sql_valor(v) -> str:
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, (int, float)):
+        return str(v)
+    esc = str(v).replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{esc}'"
 
-    lineas = [
-        "-- Respaldo Local La Esquina del Cafe",
-        f"-- Generado: {ahora.isoformat(timespec='seconds')}",
-        "SET FOREIGN_KEY_CHECKS=0;\n",
-    ]
 
+def _volcado_mysql() -> list:
+    lineas = ["SET FOREIGN_KEY_CHECKS=0;\n"]
     with engine.connect() as conn:
         tablas = [row[0] for row in conn.execute(text("SHOW TABLES")).fetchall()]
         for tabla in tablas:
@@ -508,24 +530,48 @@ def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session
             lineas.append(f"DROP TABLE IF EXISTS `{tabla}`;")
             lineas.append(f"{create_sql};\n")
 
-            filas = conn.execute(text(f"SELECT * FROM `{tabla}`")).fetchall()
+            resultado = conn.execute(text(f"SELECT * FROM `{tabla}`"))
+            nombres_cols = ", ".join(f"`{c}`" for c in resultado.keys())
+            filas = resultado.fetchall()
+            for fila in filas:
+                vals = ", ".join(_sql_valor(v) for v in fila)
+                lineas.append(f"INSERT INTO `{tabla}` ({nombres_cols}) VALUES ({vals});")
             if filas:
-                cols = conn.execute(text(f"SHOW COLUMNS FROM `{tabla}`")).fetchall()
-                nombres_cols = ", ".join(f"`{c[0]}`" for c in cols)
-                for fila in filas:
-                    vals = []
-                    for v in fila:
-                        if v is None:
-                            vals.append("NULL")
-                        elif isinstance(v, (int, float)):
-                            vals.append(str(v))
-                        else:
-                            esc = str(v).replace("\\", "\\\\").replace("'", "\\'")
-                            vals.append(f"'{esc}'")
-                    lineas.append(f"INSERT INTO `{tabla}` ({nombres_cols}) VALUES ({', '.join(vals)});")
                 lineas.append("")
-
     lineas.append("SET FOREIGN_KEY_CHECKS=1;\n")
+    return lineas
+
+
+def _volcado_sqlite() -> list:
+    # sqlite3 trae su propio volcado SQL (esquema + datos) desde sqlite_master
+    crudo = engine.raw_connection()
+    try:
+        return list(crudo.driver_connection.iterdump())
+    finally:
+        crudo.close()
+
+
+def generar_respaldo(db: Session, tipo: str, id_usuario: int) -> dict:
+    """RF 21: escribe backups/respaldo_<tipo>_<fecha>.sql. Funciona con MySQL y SQLite."""
+    CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
+    ahora = ahora_local()
+    nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
+    ruta = CARPETA_BACKUPS / nombre
+
+    motor = engine.dialect.name
+    if motor == "mysql":
+        cuerpo = _volcado_mysql()
+    elif motor == "sqlite":
+        cuerpo = _volcado_sqlite()
+    else:
+        raise HTTPException(status_code=500, detail=f"Respaldo no soportado para el motor {motor}.")
+
+    lineas = [
+        "-- Respaldo Local La Esquina del Cafe",
+        f"-- Generado: {ahora.isoformat(timespec='seconds')}",
+        f"-- Motor: {motor}\n",
+        *cuerpo,
+    ]
     ruta.write_text("\n".join(lineas), encoding="utf-8")
     _limpiar_respaldos_antiguos(30)
 
@@ -537,6 +583,11 @@ def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session
     db.commit()
 
     return {"mensaje": f"Respaldo generado correctamente: {nombre}", "archivo": nombre}
+
+
+@router.post("/respaldos/ejecutar")
+def ejecutar_respaldo_sql(tipo: str = "manual", db: Session = Depends(get_db), admin: Usuario = Depends(requiere_admin)):
+    return generar_respaldo(db, tipo, admin.id_usuario)
 
 
 @router.get("/respaldos/descargar/{nombre_archivo}")
