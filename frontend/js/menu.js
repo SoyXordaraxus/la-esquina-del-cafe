@@ -21,7 +21,6 @@ const ICONOS = {
   usuarios:    "M16 20v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
   bitacora:    "M9 4h6v3H9zM7 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1M9 12h6M9 16h6",
   respaldos:   "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
-  campana:     "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0",
   grano:       "M12 3c4 2 6 6 6 9s-2 7-6 9c-4-2-6-6-6-9s2-7 6-9zM12 3c-2 4-2 10 0 18",
 };
 
@@ -194,13 +193,6 @@ function construirLayout() {
         </select>
       </label>` : "";
 
-  // Campana: lleva a Caducidades (alertas de lotes). Solo el Administrador tiene esa pantalla;
-  // el Cajero no tiene a dónde ir, así que no se le muestra.
-  const campana = usuario.rol === "Administrador" ? `
-      <a href="caducidades.html" class="btn-icono campana" id="top-campana" title="Alertas de caducidad" aria-label="Alertas de caducidad">
-        ${svg("campana", 20)}<span class="campana-num" id="top-campana-num" hidden></span>
-      </a>` : "";
-
   document.getElementById("topbar").innerHTML = `
     <div class="topbar-marca">
       <div class="logo-cuadro">${svg("grano", 20)}</div>
@@ -209,7 +201,6 @@ function construirLayout() {
     <div class="topbar-der">
       ${selectorDev}
       <div class="topbar-fecha" id="top-fecha"></div>
-      ${campana}
       <div class="topbar-usuario">
         <div class="avatar">${escaparHtml(iniciales(usuario.nombre))}</div>
         <div class="topbar-usuario-texto"><strong>${escaparHtml(usuario.nombre)}</strong><span>${escaparHtml(usuario.rol)}</span></div>
@@ -245,21 +236,12 @@ function construirLayout() {
 }
 
 function ponerBadge(archivo, numero) {
-  if (archivo === "caducidades.html") ponerNumeroCampana(numero);
   const enlace = document.querySelector(`.sidebar-menu a[data-archivo="${archivo}"]`);
   if (!enlace) return;
   let b = enlace.querySelector(".menu-badge");
   if (!numero) { if (b) b.remove(); return; }   // sin alertas no se muestra el globo
   if (!b) { b = document.createElement("span"); b.className = "menu-badge"; enlace.appendChild(b); }
   b.textContent = numero;
-}
-
-function ponerNumeroCampana(numero) {
-  const n = document.getElementById("top-campana-num");
-  if (!n) return;
-  n.hidden = !numero;
-  n.textContent = numero || "";
-  document.getElementById("top-campana").title = numero ? `Alertas de caducidad: ${numero}` : "Alertas de caducidad";
 }
 
 // Número real de lotes caducados o por vencer (<= 5 días). Solo el Administrador ve el menú.

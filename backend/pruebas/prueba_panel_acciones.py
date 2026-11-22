@@ -118,6 +118,39 @@ for p, t in fuentes.items():
 ok(not decorativos, f"todos los <button> tienen acción (onclick, submit, id o clase con listener) {decorativos or ''}")
 ok("window.open" not in (FRONT / "js" / "inicio.js").read_text(encoding="utf-8"), "inicio.js no usa window.open")
 
+print("== Estilos: a.btn igual que button.btn, tabla del panel y sin campana")
+css = re.sub(r"/\*.*?\*/", "", (FRONT / "css" / "estilos.css").read_text(encoding="utf-8"), flags=re.S)
+
+
+def regla(selector):
+    """Declaraciones de la primera regla cuyo selector (lista separada por comas) incluye `selector`."""
+    for sels, cuerpo in re.findall(r"([^{}]+)\{([^}]*)\}", css):
+        if selector in [x.strip() for x in sels.split(",")]:
+            return cuerpo
+    return ""
+
+
+a_btn = regla("a.btn")
+ok("text-decoration: none" in a_btn and "display: inline-flex" in a_btn and "align-items: center" in a_btn,
+   "a.btn: sin subrayado, inline-flex y align-items: center")
+ok("line-height" in regla(".btn") and "padding: 11px 20px" in regla(".btn") and "border-radius: 8px" in regla(".btn"),
+   ".btn fija line-height, padding y border-radius para <button> y <a> por igual")
+for variante in ("primario", "secundario", "peligro"):
+    ok(regla(f"a.btn-{variante}:visited") == regla(f".btn-{variante}") and regla(f".btn-{variante}"),
+       f"a.btn-{variante}:visited conserva el mismo color que .btn-{variante}")
+ok(not re.search(r"a\.btn[^{,]*:hover[^{]*\{[^}]*(underline|color:\s*(blue|#00f))", css), "a.btn:hover no se subraya ni cambia a color de enlace")
+
+inicio_html = (FRONT / "inicio.html").read_text(encoding="utf-8")
+m = re.search(r"\.tabla-alertas td \{[^}]*padding:\s*(\d+)px", inicio_html)
+ok('<table class="tabla-alertas">' in inicio_html and m and 14 <= int(m.group(1)) <= 16,
+   f"tabla de alertas con padding vertical de celda 14-16px ({m.group(1) if m else 'sin regla'}px)")
+
+restos = [f"{p.name}" for p, t in fuentes.items() if re.search(r"campana|top-campana|btn-icono", t)]
+restos += ["estilos.css"] if re.search(r"campana|btn-icono", css) else []
+ok(not restos, f"la campana de Notificaciones ya no existe (HTML, menu.js ni CSS) {restos or ''}")
+ok("ponerBadge" in (FRONT / "js" / "menu.js").read_text(encoding="utf-8") and "cargarBadgeCaducidades" in (FRONT / "js" / "menu.js").read_text(encoding="utf-8"),
+   "el badge de Caducidades del menú lateral se conserva")
+
 # ------------------------------------------------------------------ frontend
 NODE = shutil.which("node")
 if not NODE:
