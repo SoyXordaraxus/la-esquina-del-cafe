@@ -121,19 +121,19 @@ else
     DESCRIPCION_BD="SQLite (backend/esquina.db)"
 fi
 
-# ---------- Direcciones (en Codespaces se usa el puerto reenviado) ----------
-if [ -n "${CODESPACE_NAME:-}" ]; then
-    DOMINIO="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
-    URL_BASE="https://$CODESPACE_NAME-$PUERTO.$DOMINIO"
-else
-    URL_BASE="http://127.0.0.1:$PUERTO"
-fi
+# ---------- Direcciones ----------
+URL_BASE="http://127.0.0.1:$PUERTO"
 
 echo ""
 echo "=============================================================="
 echo "  Base de datos: $DESCRIPCION_BD"
 echo "  Abrir:   $URL_BASE/login.html"
 echo "  API:     $URL_BASE/docs"
+if [ -n "${CODESPACE_NAME:-}" ]; then
+    # En Codespaces el navegador entra por el puerto reenviado
+    DOMINIO="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+    echo "  Codespaces: https://$CODESPACE_NAME-$PUERTO.$DOMINIO/login.html"
+fi
 echo "  Ctrl+C para apagar"
 echo "=============================================================="
 echo ""
