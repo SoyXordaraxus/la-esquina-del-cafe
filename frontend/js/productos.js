@@ -2,18 +2,26 @@ const API_CATALOGOS = `${API_BASE}/api/catalogos`;
 let listaProductos = [];
 let insumosActivos = [];
 
-function crearFilaReceta(idInsumo = "", cantidad = "") {
+// Las recetas nuevas solo ofrecen insumos activos. Al editar, un insumo que ya estaba en
+// la receta y ahora está inactivo (renglonActual) se muestra marcado para no cambiarlo
+// en silencio por otro; el backend solo lo acepta si el producto está inactivo.
+function crearFilaReceta(idInsumo = "", cantidad = "", renglonActual = null) {
   const contenedor = document.getElementById("lista-renglones-receta");
   const fila = document.createElement("div");
   fila.className = "renglon-receta";
 
-  const opciones = insumosActivos.map(i =>
+  const opcionesInsumo = [...insumosActivos];
+  if (renglonActual && !insumosActivos.some(i => String(i.id_insumo) === String(renglonActual.id_insumo))) {
+    opcionesInsumo.unshift({ id_insumo: renglonActual.id_insumo, nombre: `${renglonActual.insumo} (inactivo)`, unidad_medida: renglonActual.unidad_medida });
+  }
+
+  const opciones = opcionesInsumo.map(i =>
     `<option value="${i.id_insumo}" data-unidad="${escaparHtml(i.unidad_medida)}" ${String(i.id_insumo) === String(idInsumo) ? "selected" : ""}>
       ${escaparHtml(i.nombre)}
     </option>`
   ).join("");
 
-  const insInicial = insumosActivos.find(i => String(i.id_insumo) === String(idInsumo)) || insumosActivos[0];
+  const insInicial = opcionesInsumo.find(i => String(i.id_insumo) === String(idInsumo)) || opcionesInsumo[0];
   const unidadInicial = insInicial ? insInicial.unidad_medida : "g";
 
   fila.innerHTML = `
@@ -58,18 +66,83 @@ function abrirModalEditarProducto(id) {
   document.getElementById("prod-nombre").value = prod.nombre;
   document.getElementById("prod-categoria").value = prod.categoria;
   document.getElementById("prod-precio").value = prod.precio_venta;
-  document.getElementById("prod-estado").value = prod.estado;
   document.getElementById("error-modal-prod").style.display = "none";
 
   const contenedor = document.getElementById("lista-renglones-receta");
   contenedor.innerHTML = "";
   if (prod.receta && prod.receta.length) {
-    prod.receta.forEach(r => crearFilaReceta(r.id_insumo, r.cantidad_necesaria));
+    prod.receta.forEach(r => crearFilaReceta(r.id_insumo, r.cantidad_necesaria, r));
   } else {
     crearFilaReceta();
   }
 
   abrirModal("modal-producto");
+}
+
+function mostrarMensajeProductos(texto, esError = false) {
+  const msg = document.getElementById("msg-productos");
+  msg.className = esError ? "alerta-error" : "badge-verde";
+  msg.style.display = "block";
+  msg.style.padding = "12px 16px";
+  msg.style.borderRadius = "10px";
+  msg.textContent = texto;
+}
+
+async function enviarAccionProducto(url, opciones, respaldo) {
+  try {
+    const resp = await fetch(url, opciones);
+    const data = await leerJsonSeguro(resp);
+    if (!resp.ok) throw new Error(mensajeError(data, respaldo, resp.status));
+    mostrarMensajeProductos(data.mensaje);
+  } catch (err) {
+    mostrarMensajeProductos(mensajeExcepcion(err, respaldo), true);
+  }
+  await cargarProductosEInsumos();
+}
+
+function cambiarEstadoProducto(id, estado) {
+  return enviarAccionProducto(`${API_CATALOGOS}/productos/${id}/estado`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estado }),
+  }, "No se pudo cambiar el estado del producto.");
+}
+
+// Desactivar y Eliminar piden confirmación (RF 14); Activar se aplica directo
+function confirmarDesactivarProducto(id) {
+  const prod = listaProductos.find(p => p.id_producto === id);
+  if (!prod) return;
+  mostrarConfirmacion({
+    titulo: `¿Desactivar «${prod.nombre}»?`,
+    mensaje: "Dejará de aparecer en Caja; sus ventas y reportes se conservan. ¿Deseas continuar?",
+    textoConfirmar: "Sí, desactivar",
+    onConfirmar: () => cambiarEstadoProducto(id, "inactivo"),
+  });
+}
+
+function confirmarEliminarProducto(id) {
+  const prod = listaProductos.find(p => p.id_producto === id);
+  if (!prod || !prod.puede_eliminar) return;
+  mostrarConfirmacion({
+    titulo: `¿Eliminar «${prod.nombre}»?`,
+    mensaje: "Nunca se ha vendido, así que se borrará del catálogo junto con su receta de forma permanente. ¿Deseas continuar?",
+    textoConfirmar: "Sí, eliminar producto",
+    onConfirmar: () => enviarAccionProducto(`${API_CATALOGOS}/productos/${id}`, { method: "DELETE" }, "No se pudo eliminar el producto."),
+  });
+}
+
+function botonesProducto(p) {
+  const estado = p.estado === "activo"
+    ? `<button type="button" class="btn btn-secundario" onclick="confirmarDesactivarProducto(${p.id_producto})">Desactivar</button>`
+    : `<button type="button" class="btn btn-secundario" onclick="cambiarEstadoProducto(${p.id_producto}, 'activo')">Activar</button>`;
+  const motivo = escaparHtml(p.motivo_no_eliminar || "Tiene historial: usa Desactivar");
+  const eliminar = p.puede_eliminar
+    ? `<button type="button" class="btn btn-peligro" onclick="confirmarEliminarProducto(${p.id_producto})">Eliminar</button>`
+    : `<span class="btn-con-motivo" title="${motivo}"><button type="button" class="btn btn-peligro" disabled aria-disabled="true" title="${motivo}">Eliminar</button></span>`;
+  return `
+        <button type="button" class="btn btn-secundario" onclick="abrirModalEditarProducto(${p.id_producto})">Editar</button>
+        ${estado}
+        ${eliminar}`;
 }
 
 function renderizarProductos() {
@@ -97,8 +170,7 @@ function renderizarProductos() {
       <td>$${Number(p.precio_venta).toFixed(2)}</td>
       <td>${p.estado === "activo" ? '<span class="badge badge-verde">Activo</span>' : '<span class="badge badge-gris">Inactivo</span>'}</td>
       <td>${p.total_insumos} ${p.total_insumos === 1 ? "insumo" : "insumos"}</td>
-      <td>
-        <button type="button" class="btn btn-secundario" onclick="abrirModalEditarProducto(${p.id_producto})">Editar</button>
+      <td class="acciones-fila">${botonesProducto(p)}
       </td>
     </tr>
   `).join("");
@@ -144,7 +216,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     errBox.style.display = "none";
 
     const id = document.getElementById("prod-id").value;
-    const u = obtenerUsuario();
 
     const filas = [...document.querySelectorAll("#lista-renglones-receta .renglon-receta")];
     const receta = filas.map(f => ({
@@ -156,9 +227,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       nombre: document.getElementById("prod-nombre").value.trim(),
       categoria: document.getElementById("prod-categoria").value,
       precio_venta: parseFloat(document.getElementById("prod-precio").value),
-      estado: document.getElementById("prod-estado").value,
       receta,
-      id_usuario: u.id_usuario || 1,
     };
 
     try {
@@ -173,12 +242,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!resp.ok) throw new Error(mensajeError(data, "No se pudo guardar el producto.", resp.status));
 
       cerrarModal("modal-producto");
-      const msg = document.getElementById("msg-productos");
-      msg.className = "badge-verde";
-      msg.style.display = "block";
-      msg.style.padding = "12px 16px";
-      msg.style.borderRadius = "10px";
-      msg.textContent = data.mensaje;
+      mostrarMensajeProductos(data.mensaje);
       await cargarProductosEInsumos();
     } catch (err) {
       errBox.textContent = mensajeExcepcion(err);

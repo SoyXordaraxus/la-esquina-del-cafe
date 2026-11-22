@@ -108,6 +108,8 @@ for p, t in fuentes.items():
     for boton in re.findall(r"<button\b[^>]*>", t):
         if "onclick=" in boton or 'type="submit"' in boton:
             continue
+        if re.search(r"\bdisabled\b", boton) and "title=" in boton:
+            continue   # deshabilitado a propósito, con el motivo en el tooltip
         ident = re.search(r'id="([^"$]+)"', boton)
         if ident and re.search(rf"[\"'#]{re.escape(ident.group(1))}[\"']", js_todo):
             continue
