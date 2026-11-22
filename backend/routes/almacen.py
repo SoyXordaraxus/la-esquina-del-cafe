@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,24 @@ MOTIVOS_MERMA = (
     "Error de preparación",
     "Daño en empaque",
 )
+
+
+# RF 18: número de factura con formato fijo "FAC-" + 3 a 8 dígitos (FAC-1045, FAC-45425).
+# Solo se valida en lotes nuevos; los lotes ya guardados con otro formato se conservan.
+PATRON_FACTURA = re.compile(r"^FAC-\d{3,8}$")
+
+
+def normalizar_factura(texto: Optional[str]) -> str:
+    """Quita espacios y pone el prefijo en mayúsculas; lanza 400 si falta o no cumple el formato."""
+    valor = (texto or "").strip().upper()
+    if not valor:
+        raise HTTPException(status_code=400, detail="El número de factura es obligatorio (formato FAC-1045).")
+    if not PATRON_FACTURA.fullmatch(valor):
+        raise HTTPException(
+            status_code=400,
+            detail="El número de factura debe tener el formato FAC- seguido de 3 a 8 dígitos (ej. FAC-1045).",
+        )
+    return valor
 
 
 class EntradaLoteSchema(BaseModel):
@@ -192,7 +211,7 @@ def resumen_caducidades(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/recepcion")
+@router.post("/recepcion", status_code=201)
 def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_db), actual: Usuario = Depends(usuario_actual)):
     datos.id_usuario = actual.id_usuario
     insumo = db.query(Insumo).filter(Insumo.id_insumo == datos.id_insumo).first()
@@ -213,6 +232,15 @@ def registrar_entrada_lote(datos: EntradaLoteSchema, db: Session = Depends(get_d
     # RF 4.1: la fecha de caducidad debe ser >= fecha actual
     if datos.caducidad and datos.caducidad < hoy_local():
         raise HTTPException(status_code=400, detail="La fecha de caducidad no puede ser anterior a hoy.")
+
+    factura = normalizar_factura(datos.numero_factura)
+    repetida = db.query(LoteInsumo.id_lote).filter(
+        LoteInsumo.id_insumo == insumo.id_insumo,
+        func.upper(func.trim(LoteInsumo.numero_factura)) == factura,
+    ).first()
+    if repetida:
+        raise HTTPException(status_code=409, detail="Esa factura ya fue registrada para este insumo.")
+    datos.numero_factura = factura
 
     cantidad_convertida = convertir_a_unidad_base(datos.cantidad_ingresada, datos.unidad_compra, insumo)
 

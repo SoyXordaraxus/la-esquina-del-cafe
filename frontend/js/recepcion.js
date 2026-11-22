@@ -87,16 +87,33 @@ async function cargarTablaLotes() {
   }
 }
 
+// Acepta lo que se pegue (ej. "FAC-1045") y deja solo los dígitos, máximo 8
+function soloDigitosFactura(texto) {
+  return String(texto || "").replace(/^\s*FAC-/i, "").replace(/\D/g, "").slice(0, 8);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   cargarCatalogosRecepcion();
   cargarTablaLotes();
 
   document.getElementById("rec-insumo").addEventListener("change", actualizarUnidadPorDefecto);
 
+  // El input de factura solo acepta dígitos; el prefijo "FAC-" es fijo en pantalla
+  const inputFactura = document.getElementById("rec-factura");
+  inputFactura.addEventListener("input", () => {
+    inputFactura.value = soloDigitosFactura(inputFactura.value);
+  });
+
   document.getElementById("form-recepcion").addEventListener("submit", async (e) => {
     e.preventDefault();
     const provVal = document.getElementById("rec-proveedor").value;
     const cadVal = document.getElementById("rec-caducidad").value;
+
+    const digitos = soloDigitosFactura(document.getElementById("rec-factura").value);
+    if (!/^\d{3,8}$/.test(digitos)) {
+      mostrarMensajeRecepcion("El número de factura debe tener de 3 a 8 dígitos (ej. FAC-1045).", true);
+      return;
+    }
 
     const payload = {
       id_insumo: parseInt(document.getElementById("rec-insumo").value, 10),
@@ -105,7 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
       unidad_compra: document.getElementById("rec-unidad").value,
       costo_unitario: parseFloat(document.getElementById("rec-costo").value),
       caducidad: cadVal || null,
-      numero_factura: document.getElementById("rec-factura").value.trim() || null
+      numero_factura: `FAC-${digitos}`
     };
 
     try {

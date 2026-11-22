@@ -104,8 +104,8 @@ ok(lotes["TZ-HOY"]["texto_vencimiento"] == "Vence hoy" and lotes["TZ-HOY"]["esta
    f"caduca 21/11 -> {lotes['TZ-HOY']['texto_vencimiento']} / {lotes['TZ-HOY']['estado']} (en UTC ya estaría caducado)")
 rec = c.post("/api/almacen/recepcion", headers=K, json={
     "id_insumo": ins.id_insumo, "cantidad_ingresada": 1, "unidad_compra": "pza",
-    "costo_unitario": 6, "caducidad": DIA_NEGOCIO})
-ok(rec.status_code == 200, f"recepción con caducidad de hoy (México) aceptada -> {rec.status_code}")
+    "costo_unitario": 6, "caducidad": DIA_NEGOCIO, "numero_factura": "FAC-9001"})
+ok(rec.status_code == 201, f"recepción con caducidad de hoy (México) aceptada -> {rec.status_code}")
 semaforo = c.get("/api/inventario/semaforo", headers=A)
 ok(semaforo.status_code == 200, "semáforo responde")
 

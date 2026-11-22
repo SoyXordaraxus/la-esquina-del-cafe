@@ -60,8 +60,14 @@
             </div>
 
             <div>
-              <label for="rec-factura" style="display:block; font-weight:600; margin-bottom:6px;">No. Factura / Nota</label>
-              <input type="text" id="rec-factura" placeholder="Ej: FAC-1045" style="width:100%; padding:10px; border-radius:8px; border:1px solid #d6cec2;">
+              <label for="rec-factura" style="display:block; font-weight:600; margin-bottom:6px;">No. Factura *</label>
+              <!-- RF 18: prefijo fijo "FAC-" + 3 a 8 dígitos -->
+              <div style="display:flex; align-items:stretch;">
+                <span style="padding:10px; border:1px solid #d6cec2; border-right:none; border-radius:8px 0 0 8px; background:#f5f0eb; font-weight:600; color:#5c4d3c;">FAC-</span>
+                <input type="text" id="rec-factura" inputmode="numeric" pattern="[0-9]{3,8}" minlength="3" maxlength="8" required
+                       placeholder="1045" title="De 3 a 8 dígitos (ej. 1045)" autocomplete="off"
+                       style="flex:1; min-width:0; padding:10px; border-radius:0 8px 8px 0; border:1px solid #d6cec2;">
+              </div>
             </div>
 
             <div>

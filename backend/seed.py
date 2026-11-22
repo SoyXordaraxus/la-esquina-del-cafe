@@ -68,14 +68,14 @@ def poblar_base():
 
         # 4. Lotes PEPS (cantidades en unidad base; los vencidos quedan 'Caducado')
         lotes = [
-            LoteInsumo(id_insumo=insumos[0].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=200000, cantidad_disponible=180000, costo_unitario=24.00, caducidad=hoy + timedelta(days=180), numero_factura="AB-001", estado="Disponible"),
-            LoteInsumo(id_insumo=insumos[1].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=150000, cantidad_disponible=110000, costo_unitario=32.00, caducidad=hoy + timedelta(days=150), numero_factura="AB-002", estado="Disponible"),
-            LoteInsumo(id_insumo=insumos[2].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=120, cantidad_disponible=100, costo_unitario=22.50, caducidad=hoy - timedelta(days=2), numero_factura="LA-001", estado="Caducado"),
-            LoteInsumo(id_insumo=insumos[3].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=160, cantidad_disponible=150, costo_unitario=38.00, caducidad=hoy + timedelta(days=200), numero_factura="AB-003", estado="Disponible"),
-            LoteInsumo(id_insumo=insumos[4].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=80000, cantidad_disponible=60000, costo_unitario=26.00, caducidad=hoy + timedelta(days=240), numero_factura="AB-004", estado="Disponible"),
-            LoteInsumo(id_insumo=insumos[5].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=50, cantidad_disponible=24, costo_unitario=14.00, caducidad=hoy - timedelta(days=1), numero_factura="LA-002", estado="Caducado"),
-            LoteInsumo(id_insumo=insumos[6].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=10000, cantidad_disponible=1500, costo_unitario=210.00, caducidad=hoy + timedelta(days=90), numero_factura="CA-281026", estado="Disponible"),
-            LoteInsumo(id_insumo=insumos[7].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=2500, costo_unitario=65.00, caducidad=hoy + timedelta(days=4), numero_factura="QC-101126", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[0].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=200000, cantidad_disponible=180000, costo_unitario=24.00, caducidad=hoy + timedelta(days=180), numero_factura="FAC-1001", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[1].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=150000, cantidad_disponible=110000, costo_unitario=32.00, caducidad=hoy + timedelta(days=150), numero_factura="FAC-1002", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[2].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=120, cantidad_disponible=100, costo_unitario=22.50, caducidad=hoy - timedelta(days=2), numero_factura="FAC-1003", estado="Caducado"),
+            LoteInsumo(id_insumo=insumos[3].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=160, cantidad_disponible=150, costo_unitario=38.00, caducidad=hoy + timedelta(days=200), numero_factura="FAC-1004", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[4].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=80000, cantidad_disponible=60000, costo_unitario=26.00, caducidad=hoy + timedelta(days=240), numero_factura="FAC-1005", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[5].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=50, cantidad_disponible=24, costo_unitario=14.00, caducidad=hoy - timedelta(days=1), numero_factura="FAC-1006", estado="Caducado"),
+            LoteInsumo(id_insumo=insumos[6].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=10000, cantidad_disponible=1500, costo_unitario=210.00, caducidad=hoy + timedelta(days=90), numero_factura="FAC-1007", estado="Disponible"),
+            LoteInsumo(id_insumo=insumos[7].id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=2500, costo_unitario=65.00, caducidad=hoy + timedelta(days=4), numero_factura="FAC-1008", estado="Disponible"),
         ]
         db.add_all(lotes)
         db.commit()
@@ -97,15 +97,15 @@ def poblar_base():
         ahora = ahora_utc()
         db.add_all([
             # costo_unitario por unidad de compra: $350/kg de café, $20/L de leche, etc.
-            LoteInsumo(id_insumo=cafe.id_insumo,   id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=5000, costo_unitario=350.00, caducidad=hoy + timedelta(days=120), numero_factura="CF-001", estado="Disponible"),
+            LoteInsumo(id_insumo=cafe.id_insumo,   id_proveedor=prov.id_proveedor, cantidad_recibida=5000, cantidad_disponible=5000, costo_unitario=350.00, caducidad=hoy + timedelta(days=120), numero_factura="FAC-1009", estado="Disponible"),
             # Dos lotes de leche para ver el PEPS: se gasta primero el que caduca antes
-            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=6000, cantidad_disponible=2000, costo_unitario=20.00, fecha_entrada=ahora - timedelta(days=3), caducidad=hoy + timedelta(days=3),  numero_factura="LE-001", estado="Disponible"),
-            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=8000, cantidad_disponible=8000, costo_unitario=20.00, fecha_entrada=ahora,                      caducidad=hoy + timedelta(days=10), numero_factura="LE-002", estado="Disponible"),
-            LoteInsumo(id_insumo=jarabe.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=100.00, caducidad=hoy + timedelta(days=200), numero_factura="JV-001", estado="Disponible"),
-            LoteInsumo(id_insumo=pan.id_insumo,    id_proveedor=prov.id_proveedor, cantidad_recibida=40,   cantidad_disponible=40,   costo_unitario=60.00,  caducidad=hoy + timedelta(days=5),   numero_factura="PN-001", estado="Disponible"),
-            LoteInsumo(id_insumo=queso.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=160.00, caducidad=hoy + timedelta(days=15),  numero_factura="QP-001", estado="Disponible"),
+            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=6000, cantidad_disponible=2000, costo_unitario=20.00, fecha_entrada=ahora - timedelta(days=3), caducidad=hoy + timedelta(days=3),  numero_factura="FAC-1010", estado="Disponible"),
+            LoteInsumo(id_insumo=leche.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=8000, cantidad_disponible=8000, costo_unitario=20.00, fecha_entrada=ahora,                      caducidad=hoy + timedelta(days=10), numero_factura="FAC-1011", estado="Disponible"),
+            LoteInsumo(id_insumo=jarabe.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=100.00, caducidad=hoy + timedelta(days=200), numero_factura="FAC-1012", estado="Disponible"),
+            LoteInsumo(id_insumo=pan.id_insumo,    id_proveedor=prov.id_proveedor, cantidad_recibida=40,   cantidad_disponible=40,   costo_unitario=60.00,  caducidad=hoy + timedelta(days=5),   numero_factura="FAC-1013", estado="Disponible"),
+            LoteInsumo(id_insumo=queso.id_insumo,  id_proveedor=prov.id_proveedor, cantidad_recibida=2000, cantidad_disponible=2000, costo_unitario=160.00, caducidad=hoy + timedelta(days=15),  numero_factura="FAC-1014", estado="Disponible"),
             # Pastel: lote ya agotado a propósito -> aparece "Sin stock" en Caja
-            LoteInsumo(id_insumo=pastel.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=12,   cantidad_disponible=0,    costo_unitario=18.00,  caducidad=hoy + timedelta(days=2),   numero_factura="PS-001", estado="Agotado"),
+            LoteInsumo(id_insumo=pastel.id_insumo, id_proveedor=prov.id_proveedor, cantidad_recibida=12,   cantidad_disponible=0,    costo_unitario=18.00,  caducidad=hoy + timedelta(days=2),   numero_factura="FAC-1015", estado="Agotado"),
         ])
         db.commit()
 

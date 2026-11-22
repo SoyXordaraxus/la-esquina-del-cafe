@@ -72,7 +72,10 @@ class CancelacionEntrada(BaseModel):
 # ---------- Endpoints ----------
 @router.get("/productos-disponibles", dependencies=[Depends(usuario_actual)])
 def productos_disponibles(db: Session = Depends(get_db)):
-    """Productos activos con 'disponible' = true/false según el stock vigente."""
+    """
+    {"productos": [...], "stock_insumos": {id_insumo: cantidad}}. Cada producto trae
+    'disponible', 'max_porciones' y su 'receta' [{id_insumo, cantidad}] (RF 7.1).
+    """
     return listar_productos_disponibles(db)
 
 
