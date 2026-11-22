@@ -194,6 +194,13 @@ function construirLayout() {
         </select>
       </label>` : "";
 
+  // Campana: lleva a Caducidades (alertas de lotes). Solo el Administrador tiene esa pantalla;
+  // el Cajero no tiene a dónde ir, así que no se le muestra.
+  const campana = usuario.rol === "Administrador" ? `
+      <a href="caducidades.html" class="btn-icono campana" id="top-campana" title="Alertas de caducidad" aria-label="Alertas de caducidad">
+        ${svg("campana", 20)}<span class="campana-num" id="top-campana-num" hidden></span>
+      </a>` : "";
+
   document.getElementById("topbar").innerHTML = `
     <div class="topbar-marca">
       <div class="logo-cuadro">${svg("grano", 20)}</div>
@@ -202,7 +209,7 @@ function construirLayout() {
     <div class="topbar-der">
       ${selectorDev}
       <div class="topbar-fecha" id="top-fecha"></div>
-      <button type="button" class="btn-icono" title="Notificaciones" aria-label="Notificaciones">${svg("campana", 20)}</button>
+      ${campana}
       <div class="topbar-usuario">
         <div class="avatar">${escaparHtml(iniciales(usuario.nombre))}</div>
         <div class="topbar-usuario-texto"><strong>${escaparHtml(usuario.nombre)}</strong><span>${escaparHtml(usuario.rol)}</span></div>
@@ -238,12 +245,21 @@ function construirLayout() {
 }
 
 function ponerBadge(archivo, numero) {
+  if (archivo === "caducidades.html") ponerNumeroCampana(numero);
   const enlace = document.querySelector(`.sidebar-menu a[data-archivo="${archivo}"]`);
   if (!enlace) return;
   let b = enlace.querySelector(".menu-badge");
   if (!numero) { if (b) b.remove(); return; }   // sin alertas no se muestra el globo
   if (!b) { b = document.createElement("span"); b.className = "menu-badge"; enlace.appendChild(b); }
   b.textContent = numero;
+}
+
+function ponerNumeroCampana(numero) {
+  const n = document.getElementById("top-campana-num");
+  if (!n) return;
+  n.hidden = !numero;
+  n.textContent = numero || "";
+  document.getElementById("top-campana").title = numero ? `Alertas de caducidad: ${numero}` : "Alertas de caducidad";
 }
 
 // Número real de lotes caducados o por vencer (<= 5 días). Solo el Administrador ve el menú.

@@ -8,6 +8,21 @@ function formatearMoneda(valor) {
   });
 }
 
+// Solo clases conocidas (verde | amarillo | rojo | neutro)
+function claseTipo(tipo) {
+  return ["verde", "amarillo", "rojo", "neutro"].includes(tipo) ? tipo : "neutro";
+}
+
+// Botón de la columna Acciones: enlace a la pantalla que indica el backend en "destino"
+// (recepcion.html?insumo=, mermas.html?lote=, caducidades.html?lote=). El panel es solo
+// del Administrador, que puede abrir todas esas pantallas.
+const DESTINO_VALIDO = /^(recepcion|mermas|caducidades)\.html\?(insumo|lote)=\d+$/;
+
+function botonAccion(item) {
+  if (!item.destino || !DESTINO_VALIDO.test(item.destino)) return "—";
+  return `<a class="btn btn-secundario" href="${escaparHtml(item.destino)}">${escaparHtml(item.accion)}</a>`;
+}
+
 async function cargarPanelPrincipal() {
   try {
     const res = await fetch(API_URL);
@@ -31,16 +46,14 @@ async function cargarPanelPrincipal() {
     const tbody = document.getElementById("tabla-alertas-body");
     tbody.innerHTML = data.alertas.map(item => `
       <tr>
-        <td><strong>${item.insumo}</strong></td>
-        <td class="texto-tenue">${item.lote}</td>
-        <td class="texto-${item.vencimiento_tipo}">${item.vencimiento}</td>
-        <td><strong>${item.cantidad_restante}</strong></td>
+        <td><strong>${escaparHtml(item.insumo)}</strong></td>
+        <td class="texto-tenue">${escaparHtml(item.lote)}</td>
+        <td class="texto-${claseTipo(item.vencimiento_tipo)}">${escaparHtml(item.vencimiento)}</td>
+        <td><strong>${escaparHtml(item.cantidad_restante)}</strong></td>
         <td>
-          <span class="badge-${item.estado_tipo}">● ${item.estado}</span>
+          <span class="badge badge-${claseTipo(item.estado_tipo)}">● ${escaparHtml(item.estado)}</span>
         </td>
-        <td>
-          <button class="btn btn-secundario" type="button">${item.accion}</button>
-        </td>
+        <td>${botonAccion(item)}</td>
       </tr>
     `).join("");
 

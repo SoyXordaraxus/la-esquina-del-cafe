@@ -66,6 +66,13 @@ body.modal-abierto { overflow: hidden; }
 .topbar-der { display: flex; align-items: center; gap: 20px; }
 .topbar-fecha { text-align: right; font-size: 0.78rem; color: var(--texto-suave); line-height: 1.4; }
 .btn-icono { background: none; border: none; cursor: pointer; color: var(--texto); display: grid; place-items: center; padding: 4px; }
+.campana { position: relative; text-decoration: none; }
+.campana-num {
+  position: absolute; top: -4px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 9px; background: var(--rojo); color: #fff; font-size: 0.68rem; font-weight: 700;
+  display: grid; place-items: center; line-height: 1;
+}
+.campana-num[hidden] { display: none; }
 .topbar-usuario { display: flex; align-items: center; gap: 10px; }
 .avatar {
   width: 34px; height: 34px; border-radius: 50%;
@@ -163,6 +170,7 @@ body.modal-abierto { overflow: hidden; }
 .btn-secundario:hover:not(:disabled) { background: var(--panel); }
 .btn-peligro { background: var(--rojo); color: #fff; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+a.btn { display: inline-block; text-decoration: none; text-align: center; }
 
 label { display: block; font-size: 0.8rem; color: var(--texto-suave); margin-bottom: 4px; }
 /* Todos los campos de texto comparten estilo (antes faltaban email, search, tel...) */
@@ -186,10 +194,12 @@ th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--bor
 th { color: var(--texto-suave); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Semáforo */
-.badge { padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; color: #fff; }
+/* Usar siempre la clase base + el color:  <span class="badge badge-rojo"> */
+.badge { display: inline-block; white-space: nowrap; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; color: #fff; }
 .badge-verde { background: var(--verde); }
 .badge-amarillo { background: var(--amarillo); color: #222; }
 .badge-rojo { background: var(--rojo); }
+.badge-gris, .badge-neutro { background: #eee; color: #555; }
 
 /* ---------- 6. Tarjetas de producto (Caja) ---------- */
 .caja-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }

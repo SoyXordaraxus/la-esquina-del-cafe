@@ -25,10 +25,24 @@ async function cargarCatalogosRecepcion() {
     selProv.innerHTML = `<option value="">-- Sin proveedor --</option>` +
       (data.proveedores || []).map(p => `<option value="${p.id_proveedor}">${escaparHtml(p.nombre)}</option>`).join("");
 
+    preseleccionarInsumoDeUrl();
     actualizarUnidadPorDefecto();
   } catch (err) {
     mostrarMensajeRecepcion("No se pudieron cargar los catálogos desde el backend.", true);
   }
+}
+
+// ?insumo=<id_insumo> (botón "Reabastecer" del Panel principal): deja ese insumo elegido
+function preseleccionarInsumoDeUrl() {
+  const valor = new URLSearchParams(window.location.search).get("insumo");
+  if (!valor) return;
+  const ins = catalogosInsumos.find(i => String(i.id_insumo) === valor);
+  if (!ins) {
+    mostrarMensajeRecepcion("El insumo indicado ya no está activo o no existe. Elige uno de la lista.", true);
+    return;
+  }
+  document.getElementById("rec-insumo").value = String(ins.id_insumo);
+  document.getElementById("rec-cantidad").focus();
 }
 
 function actualizarUnidadPorDefecto() {

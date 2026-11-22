@@ -112,7 +112,7 @@ async function cargarUsuarios() {
       <td><strong>${escaparHtml(u.nombre_usuario)}</strong></td>
       <td>${escaparHtml(u.correo)}</td>
       <td>${escaparHtml(u.rol)}</td>
-      <td>${u.estado === "Activo" ? '<span class="badge-verde">Activo</span>' : '<span class="badge-rojo">Inactivo</span>'}</td>
+      <td>${u.estado === "Activo" ? '<span class="badge badge-verde">Activo</span>' : '<span class="badge badge-rojo">Inactivo</span>'}</td>
       <td>${escaparHtml(u.fecha_registro)}</td>
       <td style="white-space:nowrap;">
         <button type="button" class="btn btn-secundario" onclick="abrirEditarUsuario(${u.id_usuario})">Editar</button>

@@ -17,7 +17,7 @@ async function cargarRespaldos() {
     <tr>
       <td>${escaparHtml(r.fecha)}</td>
       <td>${escaparHtml(r.tipo)}</td>
-      <td><span class="badge-verde">${escaparHtml(r.estado)}</span></td>
+      <td><span class="badge badge-verde">${escaparHtml(r.estado)}</span></td>
       <td><strong>${escaparHtml(r.folio)}</strong> · ${escaparHtml(r.ubicacion)}</td>
       <td>${escaparHtml(r.tamano)}</td>
       <td>

@@ -95,7 +95,7 @@ function renderizarProductos() {
       <td><strong>${escaparHtml(p.nombre)}</strong></td>
       <td>${escaparHtml(p.categoria)}</td>
       <td>$${Number(p.precio_venta).toFixed(2)}</td>
-      <td>${p.estado === "activo" ? '<span class="badge-verde">Activo</span>' : '<span class="badge-amarillo" style="background:#eee;color:#555;">Inactivo</span>'}</td>
+      <td>${p.estado === "activo" ? '<span class="badge badge-verde">Activo</span>' : '<span class="badge badge-gris">Inactivo</span>'}</td>
       <td>${p.total_insumos} ${p.total_insumos === 1 ? "insumo" : "insumos"}</td>
       <td>
         <button type="button" class="btn btn-secundario" onclick="abrirModalEditarProducto(${p.id_producto})">Editar</button>

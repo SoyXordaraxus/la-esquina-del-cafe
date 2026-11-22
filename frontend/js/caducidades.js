@@ -1,6 +1,12 @@
 const API_LOTES = `${API_BASE}/api/almacen/lotes`;
 let todosLosLotes = [];
 
+// ?lote=<id_lote> (desde el Panel principal): esa fila se resalta y se lleva a la vista
+const loteResaltado = (() => {
+  const v = new URLSearchParams(window.location.search).get("lote");
+  return v && /^\d+$/.test(v) ? parseInt(v, 10) : null;
+})();
+
 function formatearFecha(iso) {
   if (!iso) return "No perecedero";
   const [y, m, d] = iso.split("-");
@@ -46,19 +52,20 @@ function renderizarTabla() {
   }
 
   tbody.innerHTML = filtrados.map((l) => {
-    const claseFila = l.semaforo === "rojo" ? "fila-roja" : (l.semaforo === "amarillo" ? "fila-amarilla" : "");
+    let claseFila = l.semaforo === "rojo" ? "fila-roja" : (l.semaforo === "amarillo" ? "fila-amarilla" : "");
+    if (l.id_lote === loteResaltado) claseFila += " fila-resaltada";
     const claseSub = l.semaforo === "rojo" ? "rojo" : (l.semaforo === "amarillo" ? "amarillo" : "neutro");
 
-    let badge = `<span class="badge-verde">Vigente</span>`;
-    if (l.estado === "Caducado") badge = `<span class="badge-rojo">Caducado</span>`;
-    else if (l.estado === "Agotado") badge = `<span class="badge-amarillo" style="background:#eee;color:#555;">Agotado</span>`;
+    let badge = `<span class="badge badge-verde">Vigente</span>`;
+    if (l.estado === "Caducado") badge = `<span class="badge badge-rojo">Caducado</span>`;
+    else if (l.estado === "Agotado") badge = `<span class="badge badge-gris">Agotado</span>`;
 
     const accion = l.estado === "Caducado"
       ? `<a href="mermas.html?lote=${l.id_lote}" class="btn btn-secundario">Registrar merma</a>`
       : "—";
 
     return `
-      <tr class="${claseFila}">
+      <tr class="${claseFila}" data-lote="${l.id_lote}">
         <td><strong>${escaparHtml(l.insumo)}</strong></td>
         <td>${escaparHtml(l.codigo_lote)}</td>
         <td>
@@ -70,6 +77,23 @@ function renderizarTabla() {
         <td>${accion}</td>
       </tr>`;
   }).join("");
+}
+
+function mostrarLoteResaltado() {
+  if (loteResaltado === null) return;
+  const aviso = document.getElementById("aviso-lote");
+  const lote = todosLosLotes.find(l => l.id_lote === loteResaltado);
+  if (!lote) {
+    aviso.className = "alerta-error";
+    aviso.textContent = `El lote #${loteResaltado} ya no existe o no está registrado.`;
+    aviso.style.display = "block";
+    return;
+  }
+  aviso.className = "aviso-lote";
+  aviso.textContent = `Lote resaltado: ${lote.insumo} · ${lote.codigo_lote} (${lote.texto_vencimiento}).`;
+  aviso.style.display = "block";
+  const fila = document.querySelector(`#tabla-caducidades tr[data-lote="${loteResaltado}"]`);
+  if (fila) fila.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -84,6 +108,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (typeof ponerBadge === "function") ponerBadge("caducidades.html", alertasTotales);
 
     renderizarTabla();
+    mostrarLoteResaltado();
   } catch (err) {
     document.getElementById("tabla-caducidades").innerHTML =
       `<tr><td colspan="6" class="alerta-error">No se pudo conectar con el servidor para cargar los lotes.</td></tr>`;
