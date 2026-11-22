@@ -32,11 +32,18 @@ for arg in "$@"; do
     esac
 done
 
-# Python: usa el venv si existe, si no python3 del sistema
+# Python: usa el venv si existe (venv/bin en Linux/macOS, venv\Scripts en Windows
+# con Git Bash), si no python3 del sistema
 if [ -x "$RAIZ/venv/bin/python" ]; then
     PY="$RAIZ/venv/bin/python"
-else
+elif [ -x "$RAIZ/venv/Scripts/python.exe" ]; then
+    PY="$RAIZ/venv/Scripts/python.exe"
+elif [ -x "$RAIZ/venv/Scripts/python" ]; then
+    PY="$RAIZ/venv/Scripts/python"
+elif command -v python3 >/dev/null 2>&1; then
     PY="python3"
+else
+    PY="python"
 fi
 
 # Verificar dependencias mínimas
