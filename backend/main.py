@@ -1,10 +1,16 @@
+import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from sqlalchemy import func
+
 from database import SessionLocal
+from models import Usuario
 from routes import auth_tableros, ventas, almacen, catalogos, reportes_admin
+
+logger = logging.getLogger("esquina")
 
 app = FastAPI(title="La Esquina del Café - API")
 
@@ -28,9 +34,19 @@ app.include_router(reportes_admin.router)
 def respaldo_al_cerrar():
     db = SessionLocal()
     try:
-        reportes_admin.ejecutar_respaldo_sql(tipo="auto_cierre", id_usuario=1, db=db)
+        admin = (
+            db.query(Usuario)
+            .filter(func.lower(Usuario.rol).like("%admin%"))
+            .order_by(Usuario.id_usuario.asc())
+            .first()
+        )
+        if admin is None:
+            logger.warning("Respaldo al cerrar omitido: no existe ningún usuario Administrador.")
+            return
+        resultado = reportes_admin.generar_respaldo(db, tipo="auto_cierre", id_usuario=admin.id_usuario)
+        logger.info("Respaldo al cerrar: %s", resultado["archivo"])
     except Exception:
-        pass
+        logger.exception("No se pudo generar el respaldo automático al cerrar el servidor")
     finally:
         db.close()
 

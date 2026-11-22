@@ -489,18 +489,19 @@ def listar_respaldos():
     }
 
 
-@router.post("/respaldos/ejecutar")
-def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session = Depends(get_db)):
-    ahora = datetime.now()
-    nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
-    ruta = CARPETA_BACKUPS / nombre
+def _sql_valor(v) -> str:
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, (int, float)):
+        return str(v)
+    esc = str(v).replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{esc}'"
 
-    lineas = [
-        "-- Respaldo Local La Esquina del Cafe",
-        f"-- Generado: {ahora.isoformat(timespec='seconds')}",
-        "SET FOREIGN_KEY_CHECKS=0;\n",
-    ]
 
+def _volcado_mysql() -> list:
+    lineas = ["SET FOREIGN_KEY_CHECKS=0;\n"]
     with engine.connect() as conn:
         tablas = [row[0] for row in conn.execute(text("SHOW TABLES")).fetchall()]
         for tabla in tablas:
@@ -508,24 +509,48 @@ def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session
             lineas.append(f"DROP TABLE IF EXISTS `{tabla}`;")
             lineas.append(f"{create_sql};\n")
 
-            filas = conn.execute(text(f"SELECT * FROM `{tabla}`")).fetchall()
+            resultado = conn.execute(text(f"SELECT * FROM `{tabla}`"))
+            nombres_cols = ", ".join(f"`{c}`" for c in resultado.keys())
+            filas = resultado.fetchall()
+            for fila in filas:
+                vals = ", ".join(_sql_valor(v) for v in fila)
+                lineas.append(f"INSERT INTO `{tabla}` ({nombres_cols}) VALUES ({vals});")
             if filas:
-                cols = conn.execute(text(f"SHOW COLUMNS FROM `{tabla}`")).fetchall()
-                nombres_cols = ", ".join(f"`{c[0]}`" for c in cols)
-                for fila in filas:
-                    vals = []
-                    for v in fila:
-                        if v is None:
-                            vals.append("NULL")
-                        elif isinstance(v, (int, float)):
-                            vals.append(str(v))
-                        else:
-                            esc = str(v).replace("\\", "\\\\").replace("'", "\\'")
-                            vals.append(f"'{esc}'")
-                    lineas.append(f"INSERT INTO `{tabla}` ({nombres_cols}) VALUES ({', '.join(vals)});")
                 lineas.append("")
-
     lineas.append("SET FOREIGN_KEY_CHECKS=1;\n")
+    return lineas
+
+
+def _volcado_sqlite() -> list:
+    # sqlite3 trae su propio volcado SQL (esquema + datos) desde sqlite_master
+    crudo = engine.raw_connection()
+    try:
+        return list(crudo.driver_connection.iterdump())
+    finally:
+        crudo.close()
+
+
+def generar_respaldo(db: Session, tipo: str, id_usuario: int) -> dict:
+    """RF 21: escribe backups/respaldo_<tipo>_<fecha>.sql. Funciona con MySQL y SQLite."""
+    CARPETA_BACKUPS.mkdir(parents=True, exist_ok=True)
+    ahora = datetime.now()
+    nombre = f"respaldo_{tipo}_{ahora.strftime('%Y%m%d_%H%M%S')}.sql"
+    ruta = CARPETA_BACKUPS / nombre
+
+    motor = engine.dialect.name
+    if motor == "mysql":
+        cuerpo = _volcado_mysql()
+    elif motor == "sqlite":
+        cuerpo = _volcado_sqlite()
+    else:
+        raise HTTPException(status_code=500, detail=f"Respaldo no soportado para el motor {motor}.")
+
+    lineas = [
+        "-- Respaldo Local La Esquina del Cafe",
+        f"-- Generado: {ahora.isoformat(timespec='seconds')}",
+        f"-- Motor: {motor}\n",
+        *cuerpo,
+    ]
     ruta.write_text("\n".join(lineas), encoding="utf-8")
     _limpiar_respaldos_antiguos(30)
 
@@ -537,6 +562,11 @@ def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session
     db.commit()
 
     return {"mensaje": f"Respaldo generado correctamente: {nombre}", "archivo": nombre}
+
+
+@router.post("/respaldos/ejecutar")
+def ejecutar_respaldo_sql(tipo: str = "manual", id_usuario: int = 1, db: Session = Depends(get_db)):
+    return generar_respaldo(db, tipo, id_usuario)
 
 
 @router.get("/respaldos/descargar/{nombre_archivo}")
