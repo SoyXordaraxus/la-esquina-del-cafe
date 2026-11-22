@@ -46,6 +46,7 @@ ETIQUETAS_TIPO = {
     "diario": "Automático diario",
     "auto_cierre": "Al cerrar el sistema",
 }
+INICIAL_TIPO = {"manual": "M", "diario": "D", "auto_cierre": "C"}
 PATRON_NOMBRE = re.compile(r"^respaldo_(?P<tipo>.+)_(?P<fecha>\d{8})_(?P<hora>\d{6})\.sql$")
 INTERVALO_REVISION = 60          # segundos entre revisiones del hilo
 CANDADO_VENCIDO = 15 * 60        # un candado de archivo más viejo se considera abandonado
@@ -105,6 +106,21 @@ def info_nombre(nombre: str) -> Optional[dict]:
     except ValueError:
         return None
     return {"tipo": m["tipo"], "fecha": fecha}
+
+
+def folio(nombre: str) -> str:
+    """
+    Folio fijo derivado del nombre del archivo (no de su posición en la lista):
+    respaldo_manual_20261122_171105.sql -> BKP-20261122-171105-M.
+    Es único porque el nombre del archivo lo es (tipo + fecha y hora): lleva
+    segundos (en un minuto puede haber varios cierres seguidos con --reload) y la
+    inicial del tipo (M manual, D diario, C al cerrar), por si dos respaldos de
+    distinto tipo caen en el mismo segundo. Nombres fuera del patrón: BKP-<nombre>.
+    """
+    m = PATRON_NOMBRE.match(nombre)
+    if m:
+        return f"BKP-{m['fecha']}-{m['hora']}-{INICIAL_TIPO.get(m['tipo'], m['tipo'][:1].upper())}"
+    return f"BKP-{Path(nombre).stem}"
 
 
 def etiqueta_tipo(tipo: str) -> str:

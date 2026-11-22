@@ -428,7 +428,7 @@ generar_respaldo = respaldos.generar_respaldo   # usado por main.py (respaldo al
 def listar_respaldos():
     respaldos.limpiar_antiguos(respaldos.CARPETA_BACKUPS)
     lista = []
-    for idx, f in enumerate(respaldos.archivos_locales(), start=1):
+    for f in respaldos.archivos_locales():
         stat = f.stat()
         info = respaldos.info_nombre(f.name)
         fecha = info["fecha"] if info else datetime.fromtimestamp(stat.st_mtime, ZONA_NEGOCIO)
@@ -436,7 +436,7 @@ def listar_respaldos():
         externa = respaldos.esta_en_externa(f.name)
         lista.append({
             "archivo": f.name,
-            "folio": f"BKP-{idx:04d}",
+            "folio": respaldos.folio(f.name),
             "fecha": fecha.strftime("%d/%m/%Y %H:%M"),
             "tipo_clave": tipo,
             "tipo": respaldos.etiqueta_tipo(tipo),

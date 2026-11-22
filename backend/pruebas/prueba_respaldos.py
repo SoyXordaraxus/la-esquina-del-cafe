@@ -259,6 +259,25 @@ ok(lista[0]["archivo"] == max(por_archivo, key=lambda n: respaldos.info_nombre(n
 ok(por_archivo[cierre]["fecha"] == f"{DIA0 + timedelta(days=7):%d/%m/%Y} 23:30", f"fecha mostrada en hora de México ({por_archivo[cierre]['fecha']})")
 
 # ---------------------------------------------------------------
+print("== Folio fijo por respaldo (no cambia al generar otro)")
+ok(por_archivo[manual_ext]["folio"] == f"BKP-{DIA0 + timedelta(days=7):%Y%m%d}-090000-M",
+   f"folio derivado del nombre: {manual_ext} -> {por_archivo[manual_ext]['folio']}")
+ok(len({r["folio"] for r in lista}) == len(lista), "no hay folios repetidos")
+ok(respaldos.folio("respaldo_auto_cierre_20261122_165634.sql") != respaldos.folio("respaldo_auto_cierre_20261122_165641.sql"),
+   "dos respaldos en el mismo minuto tienen folios distintos")
+ok(respaldos.folio("respaldo_diario_20261126_080000.sql") == "BKP-20261126-080000-D"
+   and respaldos.folio("respaldo_auto_cierre_20261126_080000.sql") == "BKP-20261126-080000-C",
+   "mismo segundo, distinto tipo: folios distintos (-D / -C)")
+folios_antes = {r["archivo"]: r["folio"] for r in lista}
+poner_reloj(7, "23:50")
+nuevo_bkp = c.post("/api/admin/respaldos/ejecutar?tipo=manual", headers=A).json()["archivo"]
+lista2 = c.get("/api/admin/respaldos", headers=A).json()["respaldos"]
+folios_despues = {r["archivo"]: r["folio"] for r in lista2}
+ok(lista2[0]["archivo"] == nuevo_bkp, "el respaldo nuevo queda primero en la lista")
+ok(all(folios_despues[a] == f for a, f in folios_antes.items() if a in folios_despues),
+   "los folios existentes no cambian al generar uno nuevo")
+ok(folios_despues[nuevo_bkp] not in folios_antes.values(), f"el nuevo recibe un folio que no estaba ({folios_despues[nuevo_bkp]})")
+
 print("== Falla del diario: log + bitácora, sin tumbar el servidor")
 original = respaldos._volcado_sqlite, respaldos._volcado_mysql
 
