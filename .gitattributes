@@ -1,0 +1,4 @@
+# Los .bat necesitan CRLF en Windows (con LF, cmd puede fallar en goto/etiquetas).
+*.bat text eol=crlf
+# Los .sh necesitan LF (con CRLF, bash marca "$'\r': command not found").
+*.sh  text eol=lf
