@@ -5,11 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from sqlalchemy import func
-
 from database import SessionLocal
-from models import Usuario
 from routes import auth_tableros, ventas, almacen, catalogos, reportes_admin
+from services import respaldos
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s:     %(name)s - %(message)s")
 logging.getLogger("esquina").setLevel(logging.INFO)
@@ -44,21 +42,27 @@ app.include_router(catalogos.router)
 app.include_router(reportes_admin.router)
 
 
+# RF 21: respaldo diario programado (hilo daemon). La primera revisión es inmediata:
+# si ya pasó HORA_RESPALDO y no hay respaldo diario de hoy, se genera al arrancar.
+@app.on_event("startup")
+def iniciar_respaldo_diario():
+    try:
+        respaldos.iniciar_programador()
+    except Exception:
+        logger.exception("No se pudo iniciar el respaldo diario programado")
+
+
 # RF 21: Respaldo automático al cerrarse el servidor
 @app.on_event("shutdown")
 def respaldo_al_cerrar():
+    respaldos.detener_programador()
     db = SessionLocal()
     try:
-        admin = (
-            db.query(Usuario)
-            .filter(func.lower(Usuario.rol).like("%admin%"))
-            .order_by(Usuario.id_usuario.asc())
-            .first()
-        )
+        admin = respaldos.primer_admin(db)
         if admin is None:
             logger.warning("Respaldo al cerrar omitido: no existe ningún usuario Administrador.")
             return
-        resultado = reportes_admin.generar_respaldo(db, tipo="auto_cierre", id_usuario=admin.id_usuario)
+        resultado = respaldos.generar_respaldo(db, tipo="auto_cierre", id_usuario=admin.id_usuario)
         logger.info("Respaldo al cerrar: %s", resultado["archivo"])
     except Exception:
         logger.exception("No se pudo generar el respaldo automático al cerrar el servidor")
