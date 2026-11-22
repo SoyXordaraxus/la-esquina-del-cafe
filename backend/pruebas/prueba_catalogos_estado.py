@@ -98,7 +98,7 @@ ok(r.status_code == 200 and productos()["Frappé"]["estado"] == "activo", "PUT d
 
 # ------------------------------------------------------------------ flujo completo con Jarabe (solo en Frappé)
 print("== Venta, desactivar producto y luego el insumo; reportes conservan el historial")
-disp = {p["nombre"]: p for p in c.get("/api/ventas/productos-disponibles", headers=K).json()}
+disp = {p["nombre"]: p for p in c.get("/api/ventas/productos-disponibles", headers=K).json()["productos"]}
 r = c.post("/api/ventas/cobrar", headers=K, json={"forma_pago": "Efectivo", "monto_recibido": 100,
                                                    "detalles": [{"id_producto": disp["Frappé"]["id_producto"], "cantidad": 1}]})
 ok(r.status_code == 201, f"se vende un Frappé -> {r.status_code}")
@@ -110,7 +110,7 @@ r = c.delete(f"{API}/productos/{FRAPPE['id_producto']}", headers=A)
 ok(r.status_code == 409 and "Desactivar" in r.json()["detail"], f"DELETE de producto con ventas -> 409: {r.json().get('detail')}")
 r = patch(f"{API}/productos/{FRAPPE['id_producto']}/estado", "inactivo")
 ok(r.status_code == 200 and productos()["Frappé"]["estado"] == "inactivo", f"desactivar Frappé -> {r.status_code}")
-ok("Frappé" not in {p["nombre"] for p in c.get("/api/ventas/productos-disponibles", headers=K).json()}, "Frappé inactivo ya no aparece en Caja")
+ok("Frappé" not in {p["nombre"] for p in c.get("/api/ventas/productos-disponibles", headers=K).json()["productos"]}, "Frappé inactivo ya no aparece en Caja")
 ok(bitacora("PRODUCTO_DESACTIVADO", "Frappé"), "bitácora PRODUCTO_DESACTIVADO")
 
 r = patch(f"{API}/insumos/{JARABE['id_insumo']}/estado", "Inactivo")

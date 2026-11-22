@@ -74,6 +74,12 @@
       font-weight: 600;
       color: #6D4C41;
     }
+    .btn-producto .prod-quedan {
+      font-size: 12px;
+      font-weight: 600;
+      color: #2E7D32;
+      margin-top: 4px;
+    }
     /* Producto sin stock (RF 7.1) */
     .btn-producto:disabled {
       background-color: #E0E0E0;
@@ -81,7 +87,8 @@
       cursor: not-allowed;
     }
     .btn-producto:disabled .prod-nombre,
-    .btn-producto:disabled .prod-precio {
+    .btn-producto:disabled .prod-precio,
+    .btn-producto:disabled .prod-quedan {
       color: #9E9E9E;
     }
 
@@ -137,6 +144,11 @@
       border-radius: 4px;
       font-weight: bold;
       cursor: pointer;
+    }
+    .btn-cant:disabled {
+      border-color: #BDBDBD;
+      color: #BDBDBD;
+      cursor: not-allowed;
     }
 
     /* Alerta de stock insuficiente (RF 7) */

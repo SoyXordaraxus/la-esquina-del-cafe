@@ -18,6 +18,7 @@ const CATALOGO_RESPALDO = [
 ];
 
 let productos = [];
+let stockInsumos = null;   // { id_insumo: cantidad vigente } desde el backend; null = sin datos (modo local)
 let categoriaActual = "Bebidas calientes";
 let comanda = []; // [{ id_producto, nombre, precio, cantidad }]
 
@@ -31,12 +32,70 @@ async function cargarProductos() {
   try {
     const resp = await fetch(`${API_URL}/productos-disponibles`);
     if (!resp.ok) throw new Error("Backend no disponible");
-    productos = await resp.json();
+    const data = await resp.json();
+    productos = data.productos || [];
+    stockInsumos = data.stock_insumos || {};
   } catch (e) {
     console.warn("Usando catálogo local de prueba en Caja:", e.message);
     productos = CATALOGO_RESPALDO;
+    stockInsumos = null;
   }
   renderizarProductos();
+  renderizarComanda();
+}
+
+// ---------------------------------------------------------------
+// Disponibilidad en pantalla (RF 7.1). Es solo una ayuda: el backend
+// vuelve a validar el stock al cobrar dentro de la transacción (RF 7).
+// ---------------------------------------------------------------
+function buscarProducto(idProducto) {
+  return productos.find(p => p.id_producto === idProducto) || null;
+}
+
+// Insumos que ya consume TODA la comanda: { id_insumo: cantidad }
+function consumoComanda() {
+  const consumo = {};
+  comanda.forEach(item => {
+    const prod = buscarProducto(item.id_producto);
+    ((prod && prod.receta) || []).forEach(r => {
+      consumo[r.id_insumo] = (consumo[r.id_insumo] || 0) + r.cantidad * item.cantidad;
+    });
+  });
+  return consumo;
+}
+
+// Cuántas unidades MÁS de este producto caben con lo que ya lleva la comanda.
+// Los productos comparten insumos: si la leche alcanza para 10 y ya hay 6 lattes,
+// solo caben 4 capuchinos.
+function cuantosMasCaben(prod) {
+  if (!prod) return Infinity;
+  if (!prod.disponible) return 0;
+  if (stockInsumos === null || !Array.isArray(prod.receta)) return Infinity;   // modo local sin backend
+  if (prod.receta.length === 0) return 0;
+  const consumo = consumoComanda();
+  let maximo = Infinity;
+  prod.receta.forEach(r => {
+    if (r.cantidad <= 0) return;
+    const restante = (stockInsumos[r.id_insumo] || 0) - (consumo[r.id_insumo] || 0);
+    // pequeño margen para errores de redondeo con decimales (0.1 + 0.2)
+    const caben = Math.floor(restante / r.cantidad + 1e-9);
+    maximo = Math.min(maximo, Math.max(caben, 0));
+  });
+  return maximo;
+}
+
+function cantidadEnComanda(idProducto) {
+  const item = comanda.find(i => i.id_producto === idProducto);
+  return item ? item.cantidad : 0;
+}
+
+function mostrarAvisoStock(prod) {
+  const total = cantidadEnComanda(prod.id_producto);
+  const alerta = document.getElementById("alerta-stock");
+  alerta.textContent = total > 0
+    ? `Solo hay insumos para ${total} ${prod.nombre} con lo que ya llevas en la comanda.`
+    : `No hay insumos para ningún ${prod.nombre} con lo que ya llevas en la comanda.`;
+  alerta.style.display = "block";
 }
 
 // 2. Dibujar botones táctiles de productos según categoría activa
@@ -55,18 +114,24 @@ function renderizarProductos() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn-producto";
-    btn.disabled = !prod.disponible;
+    const caben = cuantosMasCaben(prod);
+    const agotado = caben <= 0;
+    btn.disabled = agotado;
 
-    const textoPrecio = prod.disponible
-      ? `$${prod.precio.toFixed(2)}`
-      : `$${prod.precio.toFixed(2)} · Sin stock`;
+    const textoPrecio = agotado
+      ? `$${prod.precio.toFixed(2)} · ${prod.disponible ? "Agotado" : "Sin stock"}`
+      : `$${prod.precio.toFixed(2)}`;
+    const textoQuedan = Number.isFinite(caben)
+      ? `<span class="prod-quedan">${agotado ? "Quedan 0" : `Quedan ${caben}`}</span>`
+      : "";
 
     btn.innerHTML = `
-      <span class="prod-nombre">${prod.nombre}</span>
+      <span class="prod-nombre">${escaparTexto(prod.nombre)}</span>
       <span class="prod-precio">${textoPrecio}</span>
+      ${textoQuedan}
     `;
 
-    if (prod.disponible) {
+    if (!agotado) {
       btn.addEventListener("click", () => agregarAComanda(prod));
     }
 
@@ -75,8 +140,17 @@ function renderizarProductos() {
 }
 
 // 3. Agregar producto o sumar cantidad en la comanda
+function escaparTexto(t) {
+  return typeof escaparHtml === "function" ? escaparHtml(t) : String(t);
+}
+
 function agregarAComanda(producto) {
   ocultarAlertaStock();
+  if (cuantosMasCaben(producto) < 1) {
+    mostrarAvisoStock(producto);
+    renderizarProductos();
+    return;
+  }
   const existente = comanda.find(item => item.id_producto === producto.id_producto);
 
   if (existente) {
@@ -96,6 +170,15 @@ function cambiarCantidad(idProducto, delta) {
   ocultarAlertaStock();
   const idx = comanda.findIndex(item => item.id_producto === idProducto);
   if (idx === -1) return;
+
+  if (delta > 0) {
+    const prod = buscarProducto(idProducto);
+    if (prod && cuantosMasCaben(prod) < delta) {
+      mostrarAvisoStock(prod);
+      renderizarComanda();
+      return;
+    }
+  }
 
   comanda[idx].cantidad += delta;
   if (comanda[idx].cantidad <= 0) {
@@ -117,6 +200,7 @@ function renderizarComanda() {
         </td>
       </tr>`;
     totalEl.textContent = "Total: $0.00";
+    renderizarProductos();
     return;
   }
 
@@ -127,14 +211,15 @@ function renderizarComanda() {
     const subtotal = item.precio * item.cantidad;
     total += subtotal;
 
+    const sinMas = cuantosMasCaben(buscarProducto(item.id_producto)) < 1;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><strong>${item.nombre}</strong></td>
+      <td><strong>${escaparTexto(item.nombre)}</strong></td>
       <td>
         <div class="ctrl-cant">
           <button type="button" class="btn-cant" onclick="cambiarCantidad(${item.id_producto}, -1)">-</button>
           <span>${item.cantidad}</span>
-          <button type="button" class="btn-cant" onclick="cambiarCantidad(${item.id_producto}, 1)">+</button>
+          <button type="button" class="btn-cant" onclick="cambiarCantidad(${item.id_producto}, 1)"${sinMas ? ' disabled title="No hay insumos para más"' : ""}>+</button>
         </div>
       </td>
       <td>$${subtotal.toFixed(2)}</td>
@@ -143,6 +228,7 @@ function renderizarComanda() {
   });
 
   totalEl.textContent = `Total: $${total.toFixed(2)}`;
+  renderizarProductos();   // actualiza "Quedan N" y los agotados según la comanda
 }
 
 function calcularTotal() {

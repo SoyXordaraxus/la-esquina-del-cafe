@@ -132,7 +132,27 @@ def _stock_vigente_por_insumo(db: Session, hoy: date) -> dict:
     return {id_insumo: _dec(cantidad) for id_insumo, cantidad in filas}
 
 
-def listar_productos_disponibles(db: Session) -> list:
+def _max_porciones(ingredientes, stock: dict) -> int:
+    """Cuántas unidades del producto alcanzan con el stock vigente (0 si no tiene receta)."""
+    if not ingredientes:
+        return 0
+    maximo = None
+    for id_insumo, cantidad in ingredientes:
+        if cantidad <= 0:
+            continue
+        alcanza = int(stock.get(id_insumo, Decimal("0")) // cantidad)
+        maximo = alcanza if maximo is None else min(maximo, alcanza)
+    return max(maximo or 0, 0)
+
+
+def listar_productos_disponibles(db: Session) -> dict:
+    """
+    Catálogo de Caja (RF 7.1). Por producto: receta y max_porciones con el stock
+    vigente (lotes Disponibles y no caducados según la fecha del negocio).
+    'stock_insumos' permite a caja.js calcular el consumo combinado de la comanda,
+    porque varios productos comparten insumos. Es solo ayuda en pantalla: el cobro
+    vuelve a validar todo dentro de la transacción.
+    """
     hoy = hoy_local()
     productos = db.scalars(
         select(Producto).where(func.lower(Producto.estado) == "activo").order_by(Producto.nombre)
@@ -147,19 +167,24 @@ def listar_productos_disponibles(db: Session) -> list:
     stock = _stock_vigente_por_insumo(db, hoy)
 
     resultado = []
+    usados = set()
     for p in productos:
-        ingredientes = recetas.get(p.id_producto)
-        disponible = bool(ingredientes) and all(
-            stock.get(id_insumo, Decimal("0")) >= cantidad for id_insumo, cantidad in ingredientes
-        )
+        ingredientes = recetas.get(p.id_producto, [])
+        usados.update(i for i, _ in ingredientes)
+        maximo = _max_porciones(ingredientes, stock)
         resultado.append({
             "id_producto": p.id_producto,
             "nombre": p.nombre,
             "categoria": p.categoria,
             "precio": float(p.precio_venta),
-            "disponible": disponible,
+            "disponible": maximo > 0,
+            "max_porciones": maximo,
+            "receta": [{"id_insumo": i, "cantidad": float(c)} for i, c in ingredientes],
         })
-    return resultado
+    return {
+        "productos": resultado,
+        "stock_insumos": {str(i): float(stock.get(i, Decimal("0"))) for i in sorted(usados)},
+    }
 
 
 def registrar_venta(db: Session, id_usuario: int, forma_pago: str, monto_recibido, items: list) -> dict:

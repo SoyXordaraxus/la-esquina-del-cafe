@@ -81,7 +81,7 @@ K = {"Authorization": f"Bearer {c.post('/api/auth/login', json={'usuario': 'Osva
 
 # Una venta que se queda (2 capuchinos) y otra que se cancela (1 latte), para que haya
 # consumo real y cancelaciones distintas de cero
-prods = {p["nombre"]: p for p in c.get("/api/ventas/productos-disponibles", headers=K).json()}
+prods = {p["nombre"]: p for p in c.get("/api/ventas/productos-disponibles", headers=K).json()["productos"]}
 r = c.post("/api/ventas/cobrar", headers=K, json={"forma_pago": "Efectivo", "monto_recibido": 100,
                                                   "detalles": [{"id_producto": prods["Capuchino"]["id_producto"], "cantidad": 2}]})
 ok(r.status_code == 201, f"preparación: venta de 2 capuchinos -> {r.status_code}")
