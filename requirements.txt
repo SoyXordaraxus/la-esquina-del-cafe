@@ -5,3 +5,4 @@ pymysql
 cryptography
 python-jose[cryptography]
 tzdata
+fpdf2>=2.9

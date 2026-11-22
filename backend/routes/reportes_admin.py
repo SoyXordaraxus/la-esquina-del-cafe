@@ -1,24 +1,26 @@
-import csv
-import io
-import os
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database import get_db, engine
+from services.bitacora import registrar_bitacora
 from services.contrasenas import MENSAJE_POLITICA, cumple_politica, hashear
+from services.reportes_export import (
+    cantidades_por_unidad, dinero, fecha_dmy, generar_csv, generar_pdf, meta_reporte, nombre_archivo, numero,
+)
 from services.sesion import requiere_admin
 from services.tiempo import ZONA_NEGOCIO, ahora_local, formato_local, hoy_local, rango_utc
 from models import (
     Usuario,
     Insumo,
+    LoteInsumo,
     Venta,
     DetalleVenta,
     Producto,
@@ -55,90 +57,22 @@ class UsuarioEditarSchema(BaseModel):
 
 
 # =========================================================
-# HELPER: GENERADOR PDF NATIVO (100% LOCAL, SIN DEPENDENCIAS)
-# =========================================================
-def _escapar_pdf(texto: str) -> str:
-    limpio = (
-        str(texto)
-        .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
-        .replace("Á", "A").replace("É", "E").replace("Í", "I").replace("Ó", "O").replace("Ú", "U")
-        .replace("ñ", "n").replace("Ñ", "N").replace("·", "-")
-    )
-    return limpio.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-
-
-def generar_pdf_tabla(titulo: str, subtitulo: str, columnas: list, filas: list) -> bytes:
-    lineas_por_pagina = 38
-    paginas_datos = [filas[i:i + lineas_por_pagina] for i in range(0, max(len(filas), 1), lineas_por_pagina)]
-
-    objetos = []
-    # 1: Catalog, 2: Pages, 3: Font Regular, 4: Font Bold
-    objetos.append("<< /Type /Catalog /Pages 2 0 R >>")
-    objetos.append("")  # placeholder Pages
-    objetos.append("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
-    objetos.append("<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>")
-
-    ids_paginas = []
-    next_id = 5
-
-    for idx_pag, bloque in enumerate(paginas_datos, start=1):
-        comandos = [
-            "BT",
-            "/F2 14 Tf",
-            "40 755 Td",
-            f"({_escapar_pdf(titulo)}) Tj",
-            "/F1 9 Tf",
-            "0 -16 Td",
-            f"({_escapar_pdf(subtitulo)} | Pagina {idx_pag}/{len(paginas_datos)}) Tj",
-            "0 -22 Td",
-            "/F2 9 Tf",
-            f"({_escapar_pdf(' | '.join(columnas))}) Tj",
-            "0 -12 Td",
-            f"({'-' * 92}) Tj",
-            "/F1 9 Tf",
-        ]
-        for fila in bloque:
-            linea = " | ".join(str(c) for c in fila)[:95]
-            comandos.append("0 -14 Td")
-            comandos.append(f"({_escapar_pdf(linea)}) Tj")
-        comandos.append("ET")
-
-        stream_bytes = "\n".join(comandos).encode("latin-1", errors="replace")
-        id_contenido = next_id
-        id_pagina = next_id + 1
-        next_id += 2
-
-        objetos.append(f"<< /Length {len(stream_bytes)} >>\nstream\n{stream_bytes.decode('latin-1')}\nendstream")
-        objetos.append(
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {id_contenido} 0 R >>"
-        )
-        ids_paginas.append(f"{id_pagina} 0 R")
-
-    objetos[1] = f"<< /Type /Pages /Kids [{' '.join(ids_paginas)}] /Count {len(ids_paginas)} >>"
-
-    salida = bytearray(b"%PDF-1.4\n")
-    offsets = [0]
-    for num, contenido in enumerate(objetos, start=1):
-        offsets.append(len(salida))
-        salida.extend(f"{num} 0 obj\n{contenido}\nendobj\n".encode("latin-1"))
-
-    pos_xref = len(salida)
-    salida.extend(f"xref\n0 {len(objetos) + 1}\n".encode("latin-1"))
-    salida.extend(b"0000000000 65535 f \n")
-    for off in offsets[1:]:
-        salida.extend(f"{off:010d} 00000 n \n".encode("latin-1"))
-
-    salida.extend(
-        f"trailer\n<< /Size {len(objetos) + 1} /Root 1 0 R >>\nstartxref\n{pos_xref}\n%%EOF".encode("latin-1")
-    )
-    return bytes(salida)
-
-
-# =========================================================
 # 1. REPORTES EXPORTABLES (RF 12)
 # =========================================================
+def _costo_base_lote(lote: Optional[LoteInsumo], insumo: Optional[Insumo]) -> float:
+    """costo_unitario del lote es por unidad de compra; se divide entre factor_conversion."""
+    if lote is None:
+        return 0.0
+    factor = float(insumo.factor_conversion or 1) if insumo is not None else 1.0
+    return float(lote.costo_unitario) / factor if factor > 0 else float(lote.costo_unitario)
+
+
 def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db: Session) -> dict:
+    """
+    Estructura común para la vista previa (JSON), el PDF y el CSV:
+      titulo, columnas, alineacion (L/R), filas (texto ya formateado), total (fila
+      TOTAL formateada) y resumen (números sin formato).
+    """
     # Días de calendario del negocio -> rango UTC semiabierto [inicio_dt, fin_dt)
     inicio_dt, fin_dt = rango_utc(fecha_inicio, fecha_fin)
 
@@ -151,102 +85,134 @@ def _construir_datos_reporte(tipo: str, fecha_inicio: date, fecha_fin: date, db:
         )
         por_dia = {}
         for v in ventas:
-            dia_str = formato_local(v.fecha_emision_ticket, "%Y-%m-%d")
-            if dia_str not in por_dia:
-                por_dia[dia_str] = {"completadas": 0, "brutas": 0.0, "cancelaciones": 0.0}
+            dia = formato_local(v.fecha_emision_ticket, "%Y-%m-%d")   # clave ordenable
+            d = por_dia.setdefault(dia, {"completadas": 0, "brutas": 0.0, "cancelaciones": 0.0})
             monto = float(v.total)
-            por_dia[dia_str]["brutas"] += monto
+            d["brutas"] += monto
             if (v.estado or "").lower() == "cancelada":
-                por_dia[dia_str]["cancelaciones"] += monto
+                d["cancelaciones"] += monto
             else:
-                por_dia[dia_str]["completadas"] += 1
+                d["completadas"] += 1
 
         filas = []
-        tot_comp, tot_brutas, tot_canc, tot_netas = 0, 0.0, 0.0, 0.0
+        tot = {"completadas": 0, "brutas": 0.0, "cancelaciones": 0.0, "netas": 0.0}
         for dia, d in sorted(por_dia.items()):
             netas = d["brutas"] - d["cancelaciones"]
-            tot_comp += d["completadas"]
-            tot_brutas += d["brutas"]
-            tot_canc += d["cancelaciones"]
-            tot_netas += netas
+            for k in ("completadas", "brutas", "cancelaciones"):
+                tot[k] += d[k]
+            tot["netas"] += netas
             filas.append([
-                dia,
-                d["completadas"],
-                f"${d['brutas']:,.2f}",
-                f"-${d['cancelaciones']:,.2f}",
-                f"${netas:,.2f}",
+                fecha_dmy(date.fromisoformat(dia)),
+                str(d["completadas"]),
+                dinero(d["brutas"]),
+                dinero(d["cancelaciones"], negativo=True),
+                dinero(netas),
             ])
 
         return {
             "titulo": "Reporte de Ventas Netas",
-            "columnas": ["Fecha", "Completadas", "Ventas Brutas", "Cancelaciones", "Ventas Netas"],
+            "columnas": ["Fecha", "Ventas completadas", "Ventas brutas", "Cancelaciones", "Ventas netas"],
+            "alineacion": ["L", "R", "R", "R", "R"],
             "filas": filas,
-            "resumen": {
-                "completadas": tot_comp,
-                "brutas": round(tot_brutas, 2),
-                "cancelaciones": round(tot_canc, 2),
-                "netas": round(tot_netas, 2),
-            },
+            "total": ["TOTAL", str(tot["completadas"]), dinero(tot["brutas"]),
+                      dinero(tot["cancelaciones"], negativo=True), dinero(tot["netas"])],
+            "resumen": {k: (round(v, 2) if isinstance(v, float) else v) for k, v in tot.items()},
         }
 
     elif tipo == "consumo":
+        # Solo ventas no canceladas: al cancelar, lo consumido regresa al lote (o pasa
+        # a merma si el lote caducó, y entonces aparece en el reporte de mermas).
         movs = (
             db.query(MovimientoInventario)
+            .outerjoin(Venta, Venta.id_venta == MovimientoInventario.id_venta)
             .filter(
                 MovimientoInventario.tipo_movimiento == "SALIDA_VENTA",
                 MovimientoInventario.fecha_movimiento >= inicio_dt,
                 MovimientoInventario.fecha_movimiento < fin_dt,
+                (Venta.id_venta.is_(None)) | (func.lower(Venta.estado) != "cancelada"),
             )
             .all()
         )
-        acumulado = {}
+        insumos = {}
+        lotes = {}
+        acumulado = {}   # id_insumo -> {"cantidad", "costo"}
         for m in movs:
-            acumulado[m.id_insumo] = acumulado.get(m.id_insumo, 0.0) + float(m.cantidad)
+            ins = insumos.setdefault(m.id_insumo, db.get(Insumo, m.id_insumo))
+            lote = lotes.setdefault(m.id_lote, db.get(LoteInsumo, m.id_lote) if m.id_lote else None)
+            a = acumulado.setdefault(m.id_insumo, {"cantidad": 0.0, "costo": 0.0})
+            a["cantidad"] += float(m.cantidad)
+            a["costo"] += float(m.cantidad) * _costo_base_lote(lote, ins)
 
         filas = []
-        for id_ins, cant in sorted(acumulado.items(), key=lambda x: x[1], reverse=True):
-            ins = db.query(Insumo).filter(Insumo.id_insumo == id_ins).first()
+        por_unidad = {}
+        costo_total = 0.0
+        for id_ins, a in sorted(acumulado.items(), key=lambda x: x[1]["costo"], reverse=True):
+            ins = insumos.get(id_ins)
+            unidad = ins.unidad_medida if ins else ""
+            por_unidad[unidad] = por_unidad.get(unidad, 0.0) + a["cantidad"]
+            costo_total += a["costo"]
             filas.append([
                 ins.nombre if ins else f"Insumo #{id_ins}",
-                ins.categoria if ins else "—",
-                f"{cant:,.2f}",
-                ins.unidad_medida if ins else "",
+                ins.categoria if ins else "-",
+                numero(a["cantidad"]),
+                unidad,
+                dinero(a["costo"]),
             ])
         return {
             "titulo": "Reporte de Consumo de Insumos",
-            "columnas": ["Insumo", "Categoria", "Cantidad Consumida", "Unidad"],
+            "columnas": ["Insumo", "Categoría", "Cantidad consumida", "Unidad", "Costo"],
+            "alineacion": ["L", "L", "R", "L", "R"],
             "filas": filas,
-            "resumen": {"insumos_distintos": len(filas)},
+            # Cantidades de unidades distintas no se suman: se desglosan por unidad
+            "total": ["TOTAL", "", cantidades_por_unidad(por_unidad), "", dinero(costo_total)],
+            "resumen": {"insumos_distintos": len(filas), "cantidad_por_unidad": {u: round(v, 2) for u, v in por_unidad.items()},
+                        "costo_total": round(costo_total, 2)},
         }
 
     elif tipo == "mermas":
         mermas = (
             db.query(Merma)
             .filter(Merma.fecha >= inicio_dt, Merma.fecha < fin_dt)
-            .order_by(Merma.fecha.desc())
+            .order_by(Merma.fecha.asc())
             .all()
         )
         filas = []
+        por_unidad = {}
         total_perdida = 0.0
         for m in mermas:
-            ins = db.query(Insumo).filter(Insumo.id_insumo == m.id_insumo).first()
+            ins = db.get(Insumo, m.id_insumo)
+            unidad = ins.unidad_medida if ins else ""
             costo = float(m.costo_perdida)
             total_perdida += costo
+            por_unidad[unidad] = por_unidad.get(unidad, 0.0) + float(m.cantidad)
             filas.append([
-                formato_local(m.fecha, "%Y-%m-%d %H:%M"),
+                formato_local(m.fecha, "%d/%m/%Y %H:%M"),
                 ins.nombre if ins else f"Insumo #{m.id_insumo}",
-                f"{float(m.cantidad):g} {ins.unidad_medida if ins else ''}",
-                m.motivo,
-                f"${costo:,.2f}",
+                numero(m.cantidad),
+                unidad,
+                m.motivo or "",
+                dinero(costo),
             ])
         return {
             "titulo": "Reporte de Mermas",
-            "columnas": ["Fecha", "Insumo", "Cantidad", "Motivo", "Costo Perdida"],
+            "columnas": ["Fecha", "Insumo", "Cantidad", "Unidad", "Motivo", "Costo de pérdida"],
+            "alineacion": ["L", "L", "R", "L", "L", "R"],
             "filas": filas,
-            "resumen": {"registros": len(filas), "costo_total": round(total_perdida, 2)},
+            "total": [f"TOTAL ({len(filas)} {'registro' if len(filas) == 1 else 'registros'})", "",
+                      cantidades_por_unidad(por_unidad), "", "", dinero(total_perdida)],
+            "resumen": {"registros": len(filas), "cantidad_por_unidad": {u: round(v, 2) for u, v in por_unidad.items()},
+                        "costo_total": round(total_perdida, 2)},
         }
 
     raise HTTPException(status_code=400, detail="Tipo de reporte no válido (ventas, consumo, mermas).")
+
+
+def _periodo(fecha_inicio: Optional[date], fecha_fin: Optional[date]):
+    f_fin = fecha_fin or hoy_local()
+    f_ini = fecha_inicio or (f_fin - timedelta(days=30))
+    if f_ini > f_fin:
+        raise HTTPException(status_code=400, detail="La fecha de inicio no puede ser posterior a la fecha final.")
+    return f_ini, f_fin
 
 
 @router.get("/reportes")
@@ -256,11 +222,9 @@ def consultar_reporte(
     fecha_fin: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    hoy = hoy_local()
-    f_fin = fecha_fin or hoy
-    f_ini = fecha_inicio or (f_fin - timedelta(days=30))
+    f_ini, f_fin = _periodo(fecha_inicio, fecha_fin)
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
-    datos["periodo"] = f"{f_ini} a {f_fin}"
+    datos["periodo"] = f"{fecha_dmy(f_ini)} al {fecha_dmy(f_fin)}"
     return datos
 
 
@@ -273,51 +237,32 @@ def exportar_reporte(
     db: Session = Depends(get_db),
     admin: Usuario = Depends(requiere_admin),
 ):
-    id_usuario = admin.id_usuario
-    hoy = hoy_local()
-    f_fin = fecha_fin or hoy
-    f_ini = fecha_inicio or (f_fin - timedelta(days=30))
+    formato = (formato or "").lower()
+    if formato not in ("csv", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato no soportado. Usa csv o pdf.")
+    f_ini, f_fin = _periodo(fecha_inicio, fecha_fin)
     datos = _construir_datos_reporte(tipo, f_ini, f_fin, db)
+    meta = meta_reporte((f_ini, f_fin), admin.nombre_usuario, ahora_local())
 
-    db.add(Bitacora(
-        id_usuario=id_usuario,
-        accion="REPORTE_GENERADO",
-        detalle=f"{datos['titulo']} · {f_ini} a {f_fin} · {formato.upper()}",
-    ))
+    if formato == "csv":
+        contenido, media = generar_csv(datos, meta), "text/csv; charset=utf-8"
+    else:
+        try:
+            contenido, media = generar_pdf(datos, meta), "application/pdf"
+        except RuntimeError as error:   # fpdf2 no instalada
+            raise HTTPException(status_code=500, detail=str(error))
+
+    registrar_bitacora(
+        db, admin.id_usuario, "REPORTE_GENERADO",
+        f"{datos['titulo']} · {fecha_dmy(f_ini)} al {fecha_dmy(f_fin)} · {formato.upper()}",
+    )
     db.commit()
 
-    nombre_archivo = f"reporte_{tipo}_{f_ini}_{f_fin}.{formato.lower()}"
-
-    if formato.lower() == "csv":
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow([datos["titulo"], f"Periodo: {f_ini} a {f_fin}"])
-        writer.writerow([])
-        writer.writerow(datos["columnas"])
-        for fila in datos["filas"]:
-            writer.writerow(fila)
-
-        contenido = "\ufeff" + buffer.getvalue()
-        return Response(
-            content=contenido.encode("utf-8"),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
-        )
-
-    elif formato.lower() == "pdf":
-        pdf_bytes = generar_pdf_tabla(
-            titulo=f"La Esquina del Cafe - {datos['titulo']}",
-            subtitulo=f"Periodo: {f_ini} al {f_fin}",
-            columnas=datos["columnas"],
-            filas=datos["filas"] or [["Sin registros en el periodo seleccionado"]],
-        )
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
-        )
-
-    raise HTTPException(status_code=400, detail="Formato no soportado. Usa csv o pdf.")
+    return Response(
+        content=contenido,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo(tipo, f_ini, f_fin, formato)}"'},
+    )
 
 
 # =========================================================

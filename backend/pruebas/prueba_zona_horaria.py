@@ -77,7 +77,8 @@ ok(panel["tickets_dia"] >= 1 and panel["ventas_dia"] >= 35, f"panel cuenta la ve
 
 print("== Reporte del día")
 rep = c.get(f"/api/admin/reportes?tipo=ventas&fecha_inicio={DIA_NEGOCIO}&fecha_fin={DIA_NEGOCIO}", headers=A).json()
-ok([f[0] for f in rep["filas"]] == [DIA_NEGOCIO], f"reporte del {DIA_NEGOCIO} agrupa la venta en ese día: {rep['filas']}")
+dia_dmy = "/".join(reversed(str(DIA_NEGOCIO).split("-")))   # el reporte muestra dd/mm/aaaa
+ok([f[0] for f in rep["filas"]] == [dia_dmy], f"reporte del {DIA_NEGOCIO} agrupa la venta en ese día: {rep['filas']}")
 rep2 = c.get(f"/api/admin/reportes?tipo=ventas&fecha_inicio={DIA_UTC}&fecha_fin={DIA_UTC}", headers=A).json()
 ok(rep2["filas"] == [], f"reporte del {DIA_UTC} no la incluye")
 cons = c.get(f"/api/admin/reportes?tipo=consumo&fecha_inicio={DIA_NEGOCIO}&fecha_fin={DIA_NEGOCIO}", headers=A).json()
