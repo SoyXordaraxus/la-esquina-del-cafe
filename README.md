@@ -95,7 +95,8 @@ iconos son SVG escritos en `menu.js`. FastAPI sirve el frontend en el mismo puer
 - **MySQL 8**: en Windows, con el instalador oficial (MySQL Installer, opción "Server only"
   o "Developer Default"). Anota la contraseña de `root` que elijas.
   Si no puedes instalar MySQL, el sistema también corre con SQLite (ver `iniciar.bat sqlite`).
-- **Git**: <https://git-scm.com/downloads>.
+- **Git** (solo si vas a clonar el repositorio; si recibiste el `.zip` no hace falta):
+  <https://git-scm.com/downloads>.
 - **Docker** (opcional): solo para `./iniciar.sh mysql` en Linux, macOS o Codespaces, que
   levanta MySQL en un contenedor.
 
@@ -105,12 +106,20 @@ iconos son SVG escritos en `menu.js`. FastAPI sirve el frontend en el mismo puer
 
 Todo se hace en una terminal (`cmd` o PowerShell) dentro de la carpeta donde quieras el proyecto.
 
-**1. Clonar el repositorio**
+**1. Obtener el proyecto**
+
+*Opción A: recibiste el proyecto en un `.zip` (por ejemplo, en USB).* No necesitas Git.
+Clic derecho al `.zip` → **Extraer todo**, entra a la carpeta extraída (la que contiene
+`iniciar.bat`) y abre ahí una terminal: en el Explorador escribe `cmd` en la barra de
+direcciones y presiona Enter.
+
+*Opción B: tienes acceso al repositorio en GitHub.*
 
 ```bat
 git clone https://github.com/SoyXordaraxus/la-esquina-del-cafe.git
 cd la-esquina-del-cafe
 ```
+
 
 **2. Crear el entorno virtual e instalar dependencias**
 
@@ -138,6 +147,15 @@ La base `la_esquina_del_cafe` **se crea sola** la primera vez (con `root` hay pe
 crearla) y se llena con los datos iniciales de `backend/seed.py`. Escribe los valores sin
 espacios alrededor del `=` y sin comillas.
 
+> **Equipo de pruebas:** el archivo `.env` no viene en el `.zip`; créalo con los comandos de
+> arriba. En `DATABASE_URL` pon la contraseña de `root` de **tu** MySQL. Si prefieres no
+> cambiarla, la contraseña que usó el equipo en sus pruebas es `sixseven`; en ese caso
+> la línea queda así:
+>
+> ```
+> DATABASE_URL=mysql+pymysql://root:sixseven@127.0.0.1:3306/la_esquina_del_cafe
+> ```
+
 **4. Arrancar**
 
 Doble clic en **`iniciar.bat`**, o desde la terminal:
@@ -162,6 +180,9 @@ La documentación interactiva del API queda en <http://127.0.0.1:8000/docs>.
 ---
 
 ## 6. Instalación en Linux, macOS o GitHub Codespaces
+
+Si recibiste el `.zip`, descomprímelo (`unzip la-esquina-del-cafe-main.zip`), entra a la
+carpeta y empieza desde `python3 -m venv venv`. Si vas a clonar:
 
 ```bash
 git clone https://github.com/SoyXordaraxus/la-esquina-del-cafe.git
@@ -385,6 +406,11 @@ Los respaldos hechos con SQLite usan otra sintaxis: se restauran en un archivo S
 Ya hay otro servidor abierto (otra ventana de `iniciar.bat`/`iniciar.sh`). Ciérralo con Ctrl+C
 o usa otro puerto (`PUERTO=8001` en `.env`, o `PUERTO=8001 ./iniciar.sh`). Para ver qué programa
 lo ocupa: `netstat -ano | findstr :8000` (Windows) o `lsof -i :8000` (Linux/macOS).
+
+**"No se reconoce `iniciar.bat`" o "No such file" al arrancar desde el `.zip`**
+Revisa que la terminal esté en la carpeta que contiene `iniciar.bat`. Al extraer, Windows a
+veces crea una carpeta dentro de otra (`la-esquina-del-cafe-main\la-esquina-del-cafe-main`);
+entra a la de adentro.
 
 **"MySQL no responde"**
 - Windows: abre *Servicios*, busca `MySQL80` y dale *Iniciar* (o `net start MySQL80` en una
