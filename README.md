@@ -412,6 +412,13 @@ Revisa que la terminal esté en la carpeta que contiene `iniciar.bat`. Al extrae
 veces crea una carpeta dentro de otra (`la-esquina-del-cafe-main\la-esquina-del-cafe-main`);
 entra a la de adentro.
 
+**"Python was not found" o "python no se reconoce como comando"**
+Python no está en el PATH. Usa `py` en lugar de `python` (`py -m venv venv`), o reinstala
+Python marcando **"Add python.exe to PATH"**. En PowerShell, si usas la ruta completa de
+Python, ponle `&` adelante: `& "C:\ruta\a\python.exe" -m venv venv`. Corre los comandos
+siempre **dentro de la carpeta del proyecto** (la que contiene `requirements.txt`); si no,
+aparece "Could not open requirements file".
+
 **"MySQL no responde"**
 - Windows: abre *Servicios*, busca `MySQL80` y dale *Iniciar* (o `net start MySQL80` en una
   terminal de administrador).
